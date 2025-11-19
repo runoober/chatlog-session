@@ -12,6 +12,7 @@ export interface Session {
   remark?: string
   type?: 'private' | 'group' | 'official' | 'unknown'
   lastMessage?: {
+    nickName: string
     content: string
     createTime: number
     type: number

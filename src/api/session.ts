@@ -52,11 +52,12 @@ function transformSession(apiData: SessionApiResponse): Session {
     id: apiData.userName,
     talker: apiData.userName,
     talkerName: apiData.nickName || apiData.userName,
-    name: apiData.nickName,
+    name: getSessionName(apiData, session_type),
     avatar: '', // 后端未返回头像，暂时为空
     remark: '',
     type: session_type,
     lastMessage: apiData.content ? {
+      nickName: apiData.nickName,
       content: apiData.content,
       createTime: new Date(apiData.nTime).getTime(),
       type: 1, // 默认为文本消息
@@ -68,6 +69,31 @@ function transformSession(apiData: SessionApiResponse): Session {
     isChatRoom: isChatRoom,
     messageCount: 0, // 后端未返回消息总数
   }
+
+  function getSessionName(apiData: SessionApiResponse, session_type: Session['type']): string {
+      // 处理特殊占位符会话
+      if (apiData.userName.includes("@placeholder_foldgroup")) {
+        return '【折叠群聊】'
+      }
+      if (apiData.userName === 'brandsessionholder') {
+        return '【公众号】'
+      }
+      if (apiData.userName === 'brandservicesessionholder') {
+        return '【品牌服务】'
+      }
+
+      // 根据会话类型处理名称
+      switch (session_type) {
+        case 'group':
+          return apiData.nickName || `群聊(${apiData.userName})`
+        case 'official':
+          return apiData.nickName || `公众号(${apiData.userName})`
+        case 'private':
+          return apiData.nickName || apiData.userName
+        default:
+          return apiData.nickName || apiData.userName
+      }
+    }
 }
 
 /**

@@ -27,11 +27,11 @@ const lastMessageTime = computed(() => {
 const lastMessagePreview = computed(() => {
   const msg = props.session.lastMessage
   if (!msg) return '暂无消息'
-  
+
   // 根据消息类型显示不同的预览
   switch (msg.type) {
     case 1: // 文本
-      return msg.content || ''
+      return !msg.nickName ? msg.content : msg.nickName +': ' + msg.content || ''
     case 3: // 图片
       return '[图片]'
     case 34: // 语音
@@ -106,7 +106,7 @@ const handleClick = () => {
         </div>
         <span class="session-item__time">{{ lastMessageTime }}</span>
       </div>
-      
+
       <div class="session-item__footer">
         <div class="session-item__message ellipsis">
           {{ lastMessagePreview }}
@@ -123,35 +123,35 @@ const handleClick = () => {
   cursor: pointer;
   transition: background-color 0.2s;
   position: relative;
-  
+
   &:hover {
     background-color: var(--el-fill-color-light);
   }
-  
+
   &--active {
     background-color: var(--el-fill-color);
-    
+
     &:hover {
       background-color: var(--el-fill-color);
     }
   }
-  
+
   &--pinned {
     background-color: var(--el-fill-color-lighter);
   }
-  
+
   &__avatar {
     position: relative;
     margin-right: 12px;
     flex-shrink: 0;
   }
-  
+
   &__badge {
     position: absolute;
     top: -4px;
     right: -4px;
   }
-  
+
   &__content {
     flex: 1;
     min-width: 0;
@@ -159,45 +159,45 @@ const handleClick = () => {
     flex-direction: column;
     justify-content: space-between;
   }
-  
+
   &__header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-bottom: 6px;
   }
-  
+
   &__name {
     display: flex;
     align-items: center;
     flex: 1;
     min-width: 0;
-    
+
     .pin-icon {
       color: var(--el-color-warning);
       margin-right: 4px;
       flex-shrink: 0;
     }
-    
+
     .name-text {
       font-size: 15px;
       font-weight: 500;
       color: var(--el-text-color-primary);
     }
   }
-  
+
   &__time {
     font-size: 12px;
     color: var(--el-text-color-secondary);
     margin-left: 8px;
     flex-shrink: 0;
   }
-  
+
   &__footer {
     display: flex;
     align-items: center;
   }
-  
+
   &__message {
     font-size: 13px;
     color: var(--el-text-color-regular);
@@ -210,16 +210,16 @@ const handleClick = () => {
   .session-item {
     &--active {
       background-color: rgba(255, 255, 255, 0.08);
-      
+
       &:hover {
         background-color: rgba(255, 255, 255, 0.08);
       }
     }
-    
+
     &--pinned {
       background-color: rgba(255, 255, 255, 0.04);
     }
-    
+
     &:hover {
       background-color: rgba(255, 255, 255, 0.05);
     }
