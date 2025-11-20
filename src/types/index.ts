@@ -35,6 +35,7 @@ export interface UserSettings {
   autoPlayVoice: boolean
   showMessagePreview: boolean
   timeFormat: '12h' | '24h'
+  showMediaResources: boolean
 }
 
 export interface LoadingState {

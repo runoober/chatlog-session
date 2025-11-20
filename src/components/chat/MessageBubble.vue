@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import type { Message } from '@/types'
 import { formatMessageTime } from '@/utils'
 import Avatar from '@/components/common/Avatar.vue'
+import { useAppStore } from '@/stores/app'
 
 interface Props {
   message: Message
@@ -16,6 +17,29 @@ const props = withDefaults(defineProps<Props>(), {
   showTime: false,
   showName: false
 })
+
+// 获取 app store
+const appStore = useAppStore()
+
+// 是否显示媒体资源
+const showMediaResources = computed(() => appStore.settings.showMediaResources)
+
+// 获取媒体消息的文本描述
+const getMediaPlaceholder = (type: number, subType?: number, fileName?: string) => {
+  if (type === 3) return '[图片]'
+  if (type === 34) return '[语音]'
+  if (type === 43) return '[视频]'
+  if (type === 47) return '[表情]'
+  if (type === 49) {
+    if (subType === 5) {
+      const title = props.message.contents?.title
+      return title ? `[链接] ${title}` : '[链接]'
+    }
+    if (subType === 6) return fileName ? `[文件] ${fileName}` : '[文件]'
+    if (subType === 19) return '[聊天记录]'
+  }
+  return '[媒体]'
+}
 
 // 是否是自己发送的消息
 const isSelf = computed(() => props.message.isSelf)
@@ -214,44 +238,52 @@ const formatFileSize = (bytes: number): string => {
 
           <!-- 图片消息 -->
           <div v-else-if="isImageMessage" class="message-image" @click="handleImageClick">
-            <el-image
-              v-if="imageUrl"
-              :src="imageUrl"
-              fit="cover"
-              lazy
-              :preview-src-list="[imageUrl]"
-              class="image-content"
-            >
-              <template #error>
-                <div class="image-error">
-                  <el-icon><Picture /></el-icon>
-                  <span>图片加载失败</span>
-                </div>
-              </template>
-            </el-image>
-            <div v-else class="image-placeholder">
-              <el-icon><Picture /></el-icon>
-              <span>图片 (MD5: {{ message.contents?.md5?.substring(0, 8) }}...)</span>
-            </div>
+            <template v-if="showMediaResources">
+              <el-image
+                v-if="imageUrl"
+                :src="imageUrl"
+                fit="cover"
+                lazy
+                :preview-src-list="[imageUrl]"
+                class="image-content"
+              >
+                <template #error>
+                  <div class="image-error">
+                    <el-icon><Picture /></el-icon>
+                    <span>图片加载失败</span>
+                  </div>
+                </template>
+              </el-image>
+              <div v-else class="image-placeholder">
+                <el-icon><Picture /></el-icon>
+                <span>图片 (MD5: {{ message.contents?.md5?.substring(0, 8) }}...)</span>
+              </div>
+            </template>
+            <span v-else class="media-placeholder">{{ getMediaPlaceholder(3) }}</span>
           </div>
 
           <!-- 语音消息 -->
           <div v-else-if="isVoiceMessage" class="message-voice">
-            <el-icon class="voice-icon"><Microphone /></el-icon>
-            <span>{{ message.content || '语音消息' }}</span>
+            <template v-if="showMediaResources">
+              <el-icon class="voice-icon"><Microphone /></el-icon>
+              <span>{{ message.content || '语音消息' }}</span>
+            </template>
+            <span v-else class="media-placeholder">{{ getMediaPlaceholder(34) }}</span>
           </div>
 
           <!-- 视频消息 -->
           <div v-else-if="isVideoMessage" class="message-video" @click="handleVideoClick">
-            <div class="video-cover">
+            <div v-if="showMediaResources" class="video-cover">
               <el-icon class="play-icon"><VideoPlay /></el-icon>
               <span class="video-duration">{{ message.content }}</span>
             </div>
+            <span v-else class="media-placeholder">{{ getMediaPlaceholder(43) }}</span>
           </div>
 
           <!-- 表情消息 -->
           <div v-else-if="isEmojiMessage" class="message-emoji">
-            <img :src="message.content" alt="emoji" class="emoji-image" />
+            <img v-if="showMediaResources" :src="message.content" alt="emoji" class="emoji-image" />
+            <span v-else class="media-placeholder">{{ getMediaPlaceholder(47) }}</span>
           </div>
 
           <!-- 引用消息 (type=49, subType=57) -->
@@ -269,13 +301,17 @@ const formatFileSize = (bytes: number): string => {
 
               <!-- 被引用的图片消息 -->
               <div v-else-if="referMessageType === 'image'" class="refer-media">
-                <el-icon><Picture /></el-icon>
+                <template v-if="showMediaResources">
+                  <el-icon><Picture /></el-icon>
+                </template>
                 <span>[图片]</span>
               </div>
 
               <!-- 被引用的链接消息 -->
               <div v-else-if="referMessageType === 'link'" class="refer-media">
-                <el-icon><Link /></el-icon>
+                <template v-if="showMediaResources">
+                  <el-icon><Link /></el-icon>
+                </template>
                 <span>{{ referMessage.contents?.title || '[链接]' }}</span>
               </div>
             </div>
@@ -284,34 +320,40 @@ const formatFileSize = (bytes: number): string => {
 
           <!-- 链接分享 (type=49, subType=5) -->
           <div v-else-if="isLinkMessage" class="message-link" @click="handleLinkClick">
-            <div class="link-content">
-              <div class="link-title">{{ linkTitle }}</div>
-              <div v-if="linkUrl" class="link-url">{{ linkUrl }}</div>
-            </div>
-            <el-icon class="link-arrow"><Right /></el-icon>
+            <template v-if="showMediaResources">
+              <div class="link-content">
+                <div class="link-title">{{ linkTitle }}</div>
+                <div v-if="linkUrl" class="link-url">{{ linkUrl }}</div>
+              </div>
+              <el-icon class="link-arrow"><Right /></el-icon>
+            </template>
+            <span v-else class="media-placeholder">{{ getMediaPlaceholder(49, 5) }}</span>
           </div>
 
           <!-- 转发消息包 (type=49, subType=19) -->
           <div v-else-if="isForwardedMessage" class="message-forwarded" @click="handleForwardedClick">
-            <div class="forwarded-header">
-              <el-icon class="forwarded-icon"><ChatDotSquare /></el-icon>
-              <span class="forwarded-title">{{ forwardedTitle }}</span>
-            </div>
-            <div v-if="forwardedDesc" class="forwarded-desc">{{ forwardedDesc }}</div>
-            <div class="forwarded-footer">
-              <span v-if="forwardedCount > 0" class="forwarded-count">共{{ forwardedCount }}条消息</span>
-              <span v-else class="forwarded-hint">点击查看聊天记录</span>
-            </div>
+              <div class="forwarded-header">
+                <el-icon class="forwarded-icon"><ChatDotSquare /></el-icon>
+                <span class="forwarded-title">{{ forwardedTitle }}</span>
+              </div>
+              <div v-if="forwardedDesc" class="forwarded-desc">{{ forwardedDesc }}</div>
+              <div class="forwarded-footer">
+                <span v-if="forwardedCount > 0" class="forwarded-count">共{{ forwardedCount }}条消息</span>
+                <span v-else class="forwarded-hint">点击查看聊天记录</span>
+              </div>
           </div>
 
           <!-- 文件消息 (type=49, subType=6) -->
           <div v-else-if="isFileMessage" class="message-file" @click="handleFileClick">
-            <el-icon class="file-icon"><Document /></el-icon>
-            <div class="file-info">
-              <div class="file-name ellipsis">{{ fileName }}</div>
-              <div v-if="message.fileSize" class="file-size">{{ formatFileSize(message.fileSize) }}</div>
-              <div v-else class="file-size">未知大小</div>
-            </div>
+            <template v-if="showMediaResources">
+              <el-icon class="file-icon"><Document /></el-icon>
+              <div class="file-info">
+                <div class="file-name ellipsis">{{ fileName }}</div>
+                <div v-if="message.fileSize" class="file-size">{{ formatFileSize(message.fileSize) }}</div>
+                <div v-else class="file-size">未知大小</div>
+              </div>
+            </template>
+            <span v-else class="media-placeholder">{{ getMediaPlaceholder(49, 6, fileName) }}</span>
           </div>
 
           <!-- 其他富文本消息 (type=49, 其他subType) -->
@@ -346,7 +388,7 @@ const formatFileSize = (bytes: number): string => {
         <Avatar
           v-if="showAvatar"
           :src="message.talkerAvatar"
-          :name="message.talker"
+          :name="'我'"
           :size="36"
         />
         <div v-else class="avatar-placeholder"></div>
@@ -867,6 +909,21 @@ const formatFileSize = (bytes: number): string => {
   }
 }
 
+.media-placeholder {
+  display: inline-block;
+  padding: 8px 12px;
+  color: var(--el-text-color-secondary);
+  font-size: 14px;
+  font-style: italic;
+  background: var(--el-fill-color-light);
+  border-radius: 4px;
+  border: 1px dashed var(--el-border-color);
+
+  &:hover {
+    background: var(--el-fill-color);
+  }
+}
+
 // 动画
 @keyframes rotate {
   from {
@@ -901,6 +958,11 @@ const formatFileSize = (bytes: number): string => {
 
   .message-refer .refer-content {
     background-color: rgba(255, 255, 255, 0.05);
+  }
+
+  .media-placeholder {
+    background: var(--el-fill-color-dark);
+    border-color: var(--el-border-color-darker);
   }
 
   .message-forwarded .forwarded-footer {

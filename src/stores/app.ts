@@ -34,6 +34,7 @@ export const useAppStore = defineStore('app', () => {
     autoPlayVoice: false,
     showMessagePreview: true,
     timeFormat: '24h',
+    showMediaResources: true,
   })
 
   /**
@@ -245,6 +246,7 @@ export const useAppStore = defineStore('app', () => {
       autoPlayVoice: false,
       showMessagePreview: true,
       timeFormat: '24h',
+      showMediaResources: true,
     }
     sidebarCollapsed.value = false
     activeNav.value = 'chat'

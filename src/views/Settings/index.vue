@@ -33,6 +33,7 @@ const settings = ref({
   showTimestamp: true,
   showAvatar: true,
   messageGrouping: true,
+  showMediaResources: true,
 
   // 隐私设置
   saveHistory: true,
@@ -207,6 +208,7 @@ const loadSettings = () => {
       if (parsed.showTimestamp !== undefined) settings.value.showTimestamp = parsed.showTimestamp
       if (parsed.showAvatar !== undefined) settings.value.showAvatar = parsed.showAvatar
       if (parsed.messageGrouping !== undefined) settings.value.messageGrouping = parsed.messageGrouping
+      if (parsed.showMediaResources !== undefined) settings.value.showMediaResources = parsed.showMediaResources
 
       if (parsed.saveHistory !== undefined) settings.value.saveHistory = parsed.saveHistory
       if (parsed.autoDownloadMedia !== undefined) settings.value.autoDownloadMedia = parsed.autoDownloadMedia
@@ -263,6 +265,12 @@ const saveSettings = () => {
 
   // 保存其他设置到 chatlog-settings
   localStorage.setItem('chatlog-settings', JSON.stringify(settings.value))
+
+  // 同步用户设置到 appStore
+  appStore.updateSettings({
+    showMediaResources: settings.value.showMediaResources
+  })
+
   ElMessage.success('设置已保存')
 }
 
@@ -296,6 +304,7 @@ const resetSettings = async () => {
       showTimestamp: true,
       showAvatar: true,
       messageGrouping: true,
+      showMediaResources: true,
       saveHistory: true,
       autoDownloadMedia: true,
       compressImages: true,
@@ -606,10 +615,10 @@ const goBack = () => {
             </div>
 
             <el-form label-position="left" label-width="120px">
-              <el-form-item label="回车发送">
+              <!-- <el-form-item label="回车发送">
                 <el-switch v-model="settings.enterToSend" />
                 <span class="form-tip">关闭后使用 Ctrl+Enter 发送</span>
-              </el-form-item>
+              </el-form-item> -->
 
               <el-form-item label="显示时间">
                 <el-switch v-model="settings.showTimestamp" />
@@ -623,6 +632,27 @@ const goBack = () => {
                 <el-switch v-model="settings.messageGrouping" />
                 <span class="form-tip">相同发送者的连续消息合并显示</span>
               </el-form-item>
+
+              <el-divider />
+
+              <el-form-item label="显示媒体资源">
+                <el-switch v-model="settings.showMediaResources" />
+                <span class="form-tip">显示图片、视频、表情等外部资源</span>
+              </el-form-item>
+
+              <el-alert
+                v-if="!settings.showMediaResources"
+                type="warning"
+                :closable="false"
+                style="margin-top: 12px"
+              >
+                <template #title>
+                  <span style="font-size: 13px">关闭后媒体资源将显示为文本描述（如 [图片]）</span>
+                </template>
+                <div style="font-size: 12px; margin-top: 4px">
+                  适用于 Chatlog 服务无法获取附件密钥的情况
+                </div>
+              </el-alert>
             </el-form>
           </div>
 
