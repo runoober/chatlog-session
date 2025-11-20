@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useAppStore } from '@/stores/app'
 import { useContactStore } from '@/stores/contact'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -11,11 +12,16 @@ import Loading from '@/components/common/Loading.vue'
 import Empty from '@/components/common/Empty.vue'
 import Error from '@/components/common/Error.vue'
 import LoadingProgress from '@/components/common/LoadingProgress.vue'
+import ContactDetail from './ContactDetail.vue'
 import type { Contact } from '@/types'
 import { ContactType } from '@/types/contact'
 
+const appStore = useAppStore()
 const contactStore = useContactStore()
 const router = useRouter()
+
+// 当前选中的联系人
+const selectedContact = ref<Contact | null>(null)
 
 // 状态
 const loading = ref(false)
@@ -286,8 +292,12 @@ const handleSearch = (value: string) => {
 
 // 查看联系人详情
 const viewContact = (contact: Contact) => {
-  console.log('查看联系人:', contact)
-  // TODO: 打开联系人详情弹窗或跳转详情页
+  selectedContact.value = contact
+  
+  // 移动端：导航到详情页
+  if (appStore.isMobile) {
+    appStore.navigateToDetail('contactDetail', { contactId: contact.wxid })
+  }
 }
 
 // 发起聊天
@@ -313,10 +323,15 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="contact-page">
+  <div class="contact-page" :class="{ 'mobile-page': appStore.isMobile }">
     <div class="contact-container">
       <!-- 左侧：联系人列表 -->
-      <div class="contact-list-panel">
+      <div 
+        class="contact-list-panel"
+        :class="{
+          'mobile-hidden': appStore.isMobile && appStore.showContactDetail
+        }"
+      >
         <!-- 头部 -->
         <div class="contact-header">
           <div class="header-title">
@@ -533,8 +548,27 @@ onMounted(() => {
       </div>
 
       <!-- 右侧：联系人详情 -->
-      <div class="contact-detail-panel">
+      <div 
+        class="contact-detail-panel"
+        :class="{
+          'mobile-visible': appStore.isMobile && appStore.showContactDetail
+        }"
+      >
+        <!-- 移动端：根据导航状态显示详情 -->
+        <ContactDetail
+          v-if="appStore.isMobile && appStore.showContactDetail && appStore.currentMobileContactId"
+          :contact-id="appStore.currentMobileContactId"
+        />
+        
+        <!-- PC端：根据 selectedContact 显示详情 -->
+        <ContactDetail
+          v-else-if="!appStore.isMobile && selectedContact"
+          :contact-id="selectedContact.wxid"
+        />
+        
+        <!-- PC端未选择时显示空状态 -->
         <el-empty
+          v-else-if="!appStore.isMobile"
           description="选择一个联系人查看详情"
           :image-size="160"
         >
@@ -565,13 +599,14 @@ onMounted(() => {
 
 // 联系人列表面板
 .contact-list-panel {
-  width: 380px;
+  width: 320px;
   height: 100%;
   background-color: var(--el-bg-color);
   border-right: 1px solid var(--el-border-color-light);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  transition: transform 0.3s ease-out;
 
   .contact-header {
     padding: 16px;
@@ -856,10 +891,62 @@ onMounted(() => {
   flex: 1;
   height: 100%;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
   background-color: var(--el-bg-color);
+  overflow: hidden;
+  transition: transform 0.3s ease-out;
   min-width: 0;
+  position: relative;
+  z-index: 1;
+  
+  // PC端：居中显示空状态
+  &:not(.mobile-visible) {
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+// 移动端页面
+.mobile-page {
+  .contact-container {
+    position: relative;
+    height: 100%;
+  }
+
+  .contact-list-panel {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    border-right: none;
+    z-index: 1;
+    transform: translateX(0);
+
+    &.mobile-hidden {
+      transform: translateX(-100%);
+    }
+  }
+
+  .contact-detail-panel {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    z-index: 2;
+    transform: translateX(100%);
+    
+    // 移动端：不居中对齐，让内容正常布局
+    align-items: stretch;
+    justify-content: flex-start;
+
+    &.mobile-visible {
+      transform: translateX(0);
+    }
+  }
 }
 
 // 响应式
@@ -887,9 +974,10 @@ onMounted(() => {
     border-bottom: 1px solid var(--el-border-color-light);
   }
 
-  .contact-detail-panel {
-    display: none;
-  }
+  // 移动端使用 transform 控制显示，不需要 display: none
+  // .contact-detail-panel {
+  //   display: none;
+  // }
 
   .contact-list-container {
     .back-top-button {

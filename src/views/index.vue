@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useContactStore } from '@/stores/contact'
 import ChatView from './Chat/index.vue'
 import ContactView from './Contact/index.vue'
 import SearchView from './Search/index.vue'
 import SettingsView from './Settings/index.vue'
+import MobileTabBar from '@/components/layout/MobileTabBar.vue'
 
 const appStore = useAppStore()
 const contactStore = useContactStore()
@@ -17,9 +18,25 @@ const isContactLoading = computed(() => contactStore.isBackgroundLoading)
 type ViewType = 'chat' | 'contact' | 'search' | 'settings'
 const currentView = ref<ViewType>('chat')
 
+// 同步 activeNav 和 currentView
+watch(() => appStore.activeNav, (newNav) => {
+  currentView.value = newNav as ViewType
+})
+
+watch(currentView, (newView) => {
+  if (appStore.activeNav !== newView) {
+    appStore.setActiveNav(newView)
+  }
+})
+
 // 切换视图
 const switchView = (view: ViewType) => {
-  currentView.value = view
+  if (appStore.isMobile) {
+    appStore.switchMobileView(view)
+  } else {
+    currentView.value = view
+    appStore.setActiveNav(view)
+  }
 }
 
 // 判断是否激活
@@ -45,9 +62,9 @@ const CurrentViewComponent = computed(() => {
 </script>
 
 <template>
-  <div class="main-layout">
-    <!-- 左侧导航栏 -->
-    <aside class="sidebar">
+  <div class="main-layout" :class="{ 'mobile-layout': appStore.isMobile }">
+    <!-- 左侧导航栏（PC端） -->
+    <aside v-if="!appStore.isMobile" class="sidebar">
       <div class="sidebar-header">
         <el-icon size="24" color="#07c160">
           <ChatLineSquare />
@@ -125,8 +142,14 @@ const CurrentViewComponent = computed(() => {
 
     <!-- 右侧内容区域 -->
     <main class="content-area">
-      <component :is="CurrentViewComponent" />
+      <!-- 使用 keep-alive 缓存组件，避免切换时重新渲染，提升性能 -->
+      <keep-alive>
+        <component :is="CurrentViewComponent" />
+      </keep-alive>
     </main>
+
+    <!-- 移动端底部标签栏 -->
+    <MobileTabBar v-if="appStore.isMobile" />
   </div>
 </template>
 
@@ -137,6 +160,15 @@ const CurrentViewComponent = computed(() => {
   height: 100vh;
   background-color: var(--el-bg-color);
   overflow: hidden;
+
+  // 移动端布局
+  &.mobile-layout {
+    flex-direction: column;
+
+    .content-area {
+      padding-bottom: calc(50px + env(safe-area-inset-bottom));
+    }
+  }
 }
 
 // 侧边栏
@@ -276,16 +308,12 @@ const CurrentViewComponent = computed(() => {
 // 响应式设计
 @media (max-width: 768px) {
   .sidebar {
-    width: 50px;
+    display: none;
+  }
 
-    .nav-item {
-      height: 45px;
-    }
-
-    .sidebar-header,
-    .sidebar-footer {
-      height: 50px;
-    }
+  .content-area {
+    width: 100%;
+    height: 100%;
   }
 }
 

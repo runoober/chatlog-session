@@ -6,6 +6,7 @@ import { useContactStore } from '@/stores/contact'
 import SessionList from '@/components/chat/SessionList.vue'
 import MessageList from '@/components/chat/MessageList.vue'
 import ChatHeader from '@/components/chat/ChatHeader.vue'
+import MobileNavBar from '@/components/layout/MobileNavBar.vue'
 import type { Session } from '@/types'
 import { ElMessage } from 'element-plus'
 
@@ -15,7 +16,7 @@ const contactStore = useContactStore()
 
 // 引用
 const sessionListRef = ref()
-const messageListRef = ref()
+const messageListComponent = ref()
 
 // 搜索文本
 const searchText = ref('')
@@ -44,6 +45,11 @@ const handleSessionSelect = (session: Session) => {
   console.log('📱 选中会话:', session.id, session.lastTime)
   // 直接使用 session.lastTime 作为时间参数
   currentSessionTime.value = session.lastTime
+  
+  // 移动端：导航到消息列表页
+  if (appStore.isMobile) {
+    appStore.navigateToDetail('messageList', { sessionId: session.id })
+  }
   // MessageList 会自动监听 sessionId 变化并加载消息
 }
 
@@ -57,7 +63,12 @@ const handleSearch = (value: string) => {
 // 手动刷新数据（刷新会话列表和消息列表）
 const handleRefresh = () => {
   sessionListRef.value?.refresh()
-  messageListRef.value?.refresh()
+  messageListComponent.value?.refresh()
+}
+
+// 只刷新消息列表（移动端消息页面使用）
+const handleRefreshMessages = () => {
+  messageListComponent.value?.refresh()
 }
 
 // 自动刷新数据（只刷新会话列表）
@@ -155,6 +166,85 @@ const toggleSidebar = () => {
   appStore.toggleSidebar()
 }
 
+// 移动端返回
+const handleMobileBack = () => {
+  appStore.navigateBack()
+}
+
+// 手势相关
+const touchStartX = ref(0)
+const touchCurrentX = ref(0)
+const isDragging = ref(false)
+const chatPageRef = ref<HTMLElement | null>(null)
+
+// 处理触摸开始
+const handleTouchStart = (e: TouchEvent) => {
+  if (!appStore.isMobile || !appStore.showMessageList) return
+  
+  const touch = e.touches[0]
+  touchStartX.value = touch.clientX
+  touchCurrentX.value = touch.clientX
+  
+  // 只在左边缘20px内触发
+  if (touch.clientX < 20) {
+    isDragging.value = true
+  }
+}
+
+// 处理触摸移动
+const handleTouchMove = (e: TouchEvent) => {
+  if (!isDragging.value) return
+  
+  const touch = e.touches[0]
+  touchCurrentX.value = touch.clientX
+  const deltaX = touchCurrentX.value - touchStartX.value
+  
+  // 只允许向右滑动
+  if (deltaX > 0) {
+    e.preventDefault()
+    
+    if (chatPageRef.value) {
+      const panel = chatPageRef.value.querySelector('.message-panel') as HTMLElement
+      if (panel) {
+        const offset = Math.min(deltaX, window.innerWidth)
+        panel.style.transform = `translateX(${offset}px)`
+        panel.style.transition = 'none'
+      }
+    }
+  }
+}
+
+// 处理触摸结束
+const handleTouchEnd = () => {
+  if (!isDragging.value) return
+  
+  const deltaX = touchCurrentX.value - touchStartX.value
+  const threshold = window.innerWidth * 0.3
+  
+  if (chatPageRef.value) {
+    const panel = chatPageRef.value.querySelector('.message-panel') as HTMLElement
+    if (panel) {
+      panel.style.transition = 'transform 0.3s ease-out'
+      
+      if (deltaX > threshold) {
+        // 完成返回
+        panel.style.transform = `translateX(100%)`
+        setTimeout(() => {
+          handleMobileBack()
+          panel.style.transform = ''
+        }, 300)
+      } else {
+        // 回弹
+        panel.style.transform = ''
+      }
+    }
+  }
+  
+  isDragging.value = false
+  touchStartX.value = 0
+  touchCurrentX.value = 0
+}
+
 onMounted(async () => {
   // 加载自动刷新设置
   loadAutoRefreshSettings()
@@ -196,10 +286,22 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="chat-page">
+  <div 
+    ref="chatPageRef"
+    class="chat-page" 
+    :class="{ 'mobile-page': appStore.isMobile }"
+    @touchstart="handleTouchStart"
+    @touchmove="handleTouchMove"
+    @touchend="handleTouchEnd"
+  >
     <div class="chat-container">
       <!-- 会话列表区域 -->
-      <div class="session-panel" :class="{ 'mobile-show': appStore.isMobile && appStore.sidebarCollapsed }">
+      <div 
+        class="session-panel" 
+        :class="{ 
+          'mobile-hidden': appStore.isMobile && appStore.showMessageList 
+        }"
+      >
         <div class="session-header">
           <div class="session-header__title">
             <h2>聊天</h2>
@@ -253,7 +355,22 @@ onUnmounted(() => {
       </div>
 
       <!-- 消息区域 -->
-      <div class="message-panel">
+      <div 
+        class="message-panel"
+        :class="{
+          'mobile-visible': appStore.isMobile && appStore.showMessageList
+        }"
+      >
+        <!-- 移动端顶部导航栏 -->
+        <MobileNavBar
+          v-if="appStore.isMobile && currentSession"
+          :title="currentSession.remark || currentSession.name || currentSession.talkerName || '聊天'"
+          :show-back="true"
+          :show-refresh="true"
+          @back="handleMobileBack"
+          @refresh="handleRefreshMessages"
+        />
+
         <!-- 未选中会话时的欢迎页 -->
         <div v-if="!currentSession" class="message-welcome">
           <el-result
@@ -284,10 +401,11 @@ onUnmounted(() => {
 
         <!-- 已选中会话时显示消息 -->
         <template v-else>
-          <!-- 消息头部 -->
+          <!-- 消息头部（PC端） -->
           <ChatHeader
+            v-if="!appStore.isMobile"
             :session="currentSession"
-            :show-back="appStore.isMobile"
+            :show-back="false"
             @back="toggleSidebar"
             @refresh="handleRefresh"
             @search="() => {}"
@@ -297,7 +415,7 @@ onUnmounted(() => {
 
           <!-- 消息列表 -->
           <MessageList
-            ref="messageListRef"
+            ref="messageListComponent"
             :session-id="currentSession.id"
             :show-date="true"
             :initial-time="currentSessionTime"
@@ -330,6 +448,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  transition: transform 0.3s ease-out;
 
   .session-header {
     padding: 16px;
@@ -376,6 +495,7 @@ onUnmounted(() => {
   flex-direction: column;
   background-color: var(--el-bg-color);
   min-width: 0;
+  transition: transform 0.3s ease-out;
 
   .message-welcome {
     flex: 1;
@@ -404,14 +524,26 @@ onUnmounted(() => {
 
 }
 
-// 响应式设计
-@media (max-width: 768px) {
+// 移动端页面
+.mobile-page {
+  .chat-container {
+    position: relative;
+    height: 100%;
+  }
+
   .session-panel {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     width: 100%;
     border-right: none;
+    z-index: 1;
+    transform: translateX(0);
 
-    &.mobile-show {
-      display: flex;
+    &.mobile-hidden {
+      transform: translateX(-100%);
     }
   }
 
@@ -421,12 +553,30 @@ onUnmounted(() => {
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: 10;
+    width: 100%;
+    z-index: 2;
+    transform: translateX(100%);
+
+    &.mobile-visible {
+      transform: translateX(0);
+    }
   }
 
-  // 未选中会话时隐藏消息面板
+  // 移动端隐藏欢迎页
   .message-welcome {
     display: none;
+  }
+}
+
+// 响应式设计
+@media (max-width: 768px) {
+  .session-panel {
+    width: 100%;
+    border-right: none;
+  }
+
+  .message-panel {
+    width: 100%;
   }
 }
 

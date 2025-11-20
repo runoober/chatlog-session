@@ -5,6 +5,18 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { UserSettings, AppConfig } from '@/types'
 
+/**
+ * 导航栈项
+ */
+export interface NavigationStackItem {
+  view: 'sessionList' | 'messageList' | 'contactList' | 'contactDetail' | 'search' | 'settings'
+  params?: {
+    sessionId?: string
+    contactId?: string
+    [key: string]: any
+  }
+}
+
 export const useAppStore = defineStore('app', () => {
   // ==================== State ====================
 
@@ -63,6 +75,33 @@ export const useAppStore = defineStore('app', () => {
    * 当前激活的导航项
    */
   const activeNav = ref('chat')
+
+  /**
+   * 页面导航栈（移动端使用）
+   */
+  const navigationStack = ref<NavigationStackItem[]>([
+    { view: 'sessionList' }
+  ])
+
+  /**
+   * 是否显示消息列表（移动端控制）
+   */
+  const showMessageList = ref(false)
+
+  /**
+   * 是否显示联系人详情（移动端控制）
+   */
+  const showContactDetail = ref(false)
+
+  /**
+   * 当前会话ID（移动端导航用）
+   */
+  const currentMobileSessionId = ref<string | undefined>(undefined)
+
+  /**
+   * 当前联系人ID（移动端导航用）
+   */
+  const currentMobileContactId = ref<string | undefined>(undefined)
 
   /**
    * 全局错误信息
@@ -195,7 +234,13 @@ export const useAppStore = defineStore('app', () => {
    * 检测移动端
    */
   function checkMobile() {
-    isMobile.value = window.innerWidth < 768
+    const wasMobile = isMobile.value
+    isMobile.value = window.innerWidth <= 768
+    
+    // 从移动端切换到PC端时，重置移动端状态
+    if (wasMobile && !isMobile.value) {
+      resetMobileNavigation()
+    }
   }
 
   /**
@@ -203,6 +248,85 @@ export const useAppStore = defineStore('app', () => {
    */
   function toggleSidebar() {
     sidebarCollapsed.value = !sidebarCollapsed.value
+  }
+
+  /**
+   * 导航到详情页（移动端）
+   */
+  function navigateToDetail(view: NavigationStackItem['view'], params?: NavigationStackItem['params']) {
+    if (!isMobile.value) return
+
+    navigationStack.value.push({ view, params })
+
+    if (view === 'messageList') {
+      showMessageList.value = true
+      currentMobileSessionId.value = params?.sessionId
+    } else if (view === 'contactDetail') {
+      showContactDetail.value = true
+      currentMobileContactId.value = params?.contactId
+    }
+
+    if (isDebug.value) {
+      console.log('📱 Navigate to detail:', view, params, 'Stack:', navigationStack.value)
+    }
+  }
+
+  /**
+   * 返回上一页（移动端）
+   */
+  function navigateBack() {
+    if (!isMobile.value || navigationStack.value.length <= 1) return
+
+    const current = navigationStack.value.pop()
+
+    if (current?.view === 'messageList') {
+      showMessageList.value = false
+      currentMobileSessionId.value = undefined
+    } else if (current?.view === 'contactDetail') {
+      showContactDetail.value = false
+      currentMobileContactId.value = undefined
+    }
+
+    if (isDebug.value) {
+      console.log('📱 Navigate back, Stack:', navigationStack.value)
+    }
+  }
+
+  /**
+   * 切换主视图（移动端底部标签栏）
+   */
+  function switchMobileView(view: string) {
+    if (!isMobile.value) return
+
+    setActiveNav(view)
+    
+    // 只在有二级页面时才重置导航栈
+    // 避免不必要的状态清空，提升切换性能
+    if (navigationStack.value.length > 1) {
+      resetMobileNavigation()
+    }
+
+    if (isDebug.value) {
+      console.log('📱 Switch mobile view:', view, 'Stack depth:', navigationStack.value.length)
+    }
+  }
+
+  /**
+   * 重置移动端导航状态
+   */
+  function resetMobileNavigation() {
+    navigationStack.value = [{ view: 'sessionList' }]
+    showMessageList.value = false
+    showContactDetail.value = false
+    currentMobileSessionId.value = undefined
+    currentMobileContactId.value = undefined
+  }
+
+  /**
+   * 检查是否可以返回
+   */
+  function canNavigateBack() {
+    return isMobile.value && navigationStack.value.length > 1
   }
 
   /**
@@ -254,6 +378,7 @@ export const useAppStore = defineStore('app', () => {
     Object.keys(loading.value).forEach(key => {
       loading.value[key as keyof typeof loading.value] = false
     })
+    resetMobileNavigation()
   }
 
   // ==================== Return ====================
@@ -267,6 +392,11 @@ export const useAppStore = defineStore('app', () => {
     isMobile,
     activeNav,
     error,
+    navigationStack,
+    showMessageList,
+    showContactDetail,
+    currentMobileSessionId,
+    currentMobileContactId,
 
     // Getters
     isDark,
@@ -288,5 +418,10 @@ export const useAppStore = defineStore('app', () => {
     setError,
     clearError,
     $reset,
+    navigateToDetail,
+    navigateBack,
+    switchMobileView,
+    resetMobileNavigation,
+    canNavigateBack,
   }
 })
