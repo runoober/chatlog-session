@@ -34,6 +34,8 @@ const settings = ref({
   showAvatar: true,
   messageGrouping: true,
   showMediaResources: true,
+  autoRefresh: false,
+  autoRefreshInterval: 30,
 
   // 隐私设置
   saveHistory: true,
@@ -209,6 +211,8 @@ const loadSettings = () => {
       if (parsed.showAvatar !== undefined) settings.value.showAvatar = parsed.showAvatar
       if (parsed.messageGrouping !== undefined) settings.value.messageGrouping = parsed.messageGrouping
       if (parsed.showMediaResources !== undefined) settings.value.showMediaResources = parsed.showMediaResources
+      if (parsed.autoRefresh !== undefined) settings.value.autoRefresh = parsed.autoRefresh
+      if (parsed.autoRefreshInterval !== undefined) settings.value.autoRefreshInterval = parsed.autoRefreshInterval
 
       if (parsed.saveHistory !== undefined) settings.value.saveHistory = parsed.saveHistory
       if (parsed.autoDownloadMedia !== undefined) settings.value.autoDownloadMedia = parsed.autoDownloadMedia
@@ -305,6 +309,8 @@ const resetSettings = async () => {
       showAvatar: true,
       messageGrouping: true,
       showMediaResources: true,
+      autoRefresh: false,
+      autoRefreshInterval: 30,
       saveHistory: true,
       autoDownloadMedia: true,
       compressImages: true,
@@ -653,6 +659,26 @@ const goBack = () => {
                   适用于 Chatlog 服务无法获取附件密钥的情况
                 </div>
               </el-alert>
+
+              <el-divider />
+
+              <el-form-item label="自动刷新">
+                <el-switch v-model="settings.autoRefresh" />
+                <span class="form-tip">自动刷新会话列表和消息</span>
+              </el-form-item>
+
+              <el-form-item v-if="settings.autoRefresh" label="刷新间隔">
+                <el-input-number
+                  v-model="settings.autoRefreshInterval"
+                  :min="10"
+                  :max="300"
+                  :step="10"
+                  style="width: 200px"
+                />
+                <el-text type="info" size="small" style="margin-left: 12px">
+                  秒（s）
+                </el-text>
+              </el-form-item>
             </el-form>
           </div>
 

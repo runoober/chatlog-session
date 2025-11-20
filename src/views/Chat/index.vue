@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useSessionStore } from '@/stores/session'
 import { useContactStore } from '@/stores/contact'
@@ -7,6 +7,7 @@ import SessionList from '@/components/chat/SessionList.vue'
 import MessageList from '@/components/chat/MessageList.vue'
 import ChatHeader from '@/components/chat/ChatHeader.vue'
 import type { Session } from '@/types'
+import { ElMessage } from 'element-plus'
 
 const appStore = useAppStore()
 const sessionStore = useSessionStore()
@@ -32,6 +33,12 @@ const currentSession = computed(() => {
 // 当前会话的初始时间（用于消息加载）
 const currentSessionTime = ref<string | undefined>(undefined)
 
+// 自动刷新相关
+const autoRefreshTimer = ref<number | null>(null)
+const autoRefreshEnabled = ref(false)
+const autoRefreshInterval = ref(30)
+const isAutoRefreshing = ref(false)
+
 // 处理会话选择
 const handleSessionSelect = (session: Session) => {
   console.log('📱 选中会话:', session.id, session.lastTime)
@@ -51,7 +58,95 @@ const handleSearch = (value: string) => {
 const handleRefresh = () => {
   sessionListRef.value?.refresh()
   messageListRef.value?.refresh()
+  if (autoRefreshEnabled.value) {
+    ElMessage.success('已刷新')
+  }
 }
+
+// 启动自动刷新
+const startAutoRefresh = () => {
+  if (autoRefreshTimer.value) {
+    clearInterval(autoRefreshTimer.value)
+  }
+  
+  if (autoRefreshEnabled.value && autoRefreshInterval.value > 0) {
+    console.log(`🔄 启动自动刷新，间隔: ${autoRefreshInterval.value}秒`)
+    autoRefreshTimer.value = window.setInterval(() => {
+      if (!isAutoRefreshing.value) {
+        isAutoRefreshing.value = true
+        console.log('🔄 执行自动刷新...')
+        handleRefresh()
+        setTimeout(() => {
+          isAutoRefreshing.value = false
+        }, 1000)
+      }
+    }, autoRefreshInterval.value * 1000)
+  }
+}
+
+// 停止自动刷新
+const stopAutoRefresh = () => {
+  if (autoRefreshTimer.value) {
+    console.log('⏸️ 停止自动刷新')
+    clearInterval(autoRefreshTimer.value)
+    autoRefreshTimer.value = null
+  }
+}
+
+// 切换自动刷新
+const toggleAutoRefresh = () => {
+  autoRefreshEnabled.value = !autoRefreshEnabled.value
+  saveAutoRefreshSettings()
+  
+  if (autoRefreshEnabled.value) {
+    ElMessage.success(`已启用自动刷新（${autoRefreshInterval.value}秒）`)
+    startAutoRefresh()
+  } else {
+    ElMessage.info('已停止自动刷新')
+    stopAutoRefresh()
+  }
+}
+
+// 保存自动刷新设置
+const saveAutoRefreshSettings = () => {
+  const settings = localStorage.getItem('chatlog-settings')
+  if (settings) {
+    try {
+      const parsed = JSON.parse(settings)
+      parsed.autoRefresh = autoRefreshEnabled.value
+      parsed.autoRefreshInterval = autoRefreshInterval.value
+      localStorage.setItem('chatlog-settings', JSON.stringify(parsed))
+    } catch (err) {
+      console.error('保存自动刷新设置失败:', err)
+    }
+  }
+}
+
+// 加载自动刷新设置
+const loadAutoRefreshSettings = () => {
+  const settings = localStorage.getItem('chatlog-settings')
+  if (settings) {
+    try {
+      const parsed = JSON.parse(settings)
+      if (parsed.autoRefresh !== undefined) {
+        autoRefreshEnabled.value = parsed.autoRefresh
+      }
+      if (parsed.autoRefreshInterval !== undefined) {
+        autoRefreshInterval.value = parsed.autoRefreshInterval
+      }
+    } catch (err) {
+      console.error('加载自动刷新设置失败:', err)
+    }
+  }
+}
+
+// 监听设置变化
+watch([autoRefreshEnabled, autoRefreshInterval], () => {
+  if (autoRefreshEnabled.value) {
+    stopAutoRefresh()
+    startAutoRefresh()
+  }
+})
 
 // 切换侧边栏（移动端）
 const toggleSidebar = () => {
@@ -59,6 +154,14 @@ const toggleSidebar = () => {
 }
 
 onMounted(async () => {
+  // 加载自动刷新设置
+  loadAutoRefreshSettings()
+  
+  // 如果启用了自动刷新，启动定时器
+  if (autoRefreshEnabled.value) {
+    startAutoRefresh()
+  }
+  
   // 检查数据库中是否有联系人数据
   // 如果为空，自动启动后台加载
   try {
@@ -83,6 +186,11 @@ onMounted(async () => {
     console.error('检查联系人数据失败:', err)
   }
 })
+
+onUnmounted(() => {
+  // 组件卸载时停止自动刷新
+  stopAutoRefresh()
+})
 </script>
 
 <template>
@@ -96,6 +204,18 @@ onMounted(async () => {
             <el-tag v-if="sessionStore.totalUnreadCount > 0" size="small">
               {{ sessionStore.totalUnreadCount }}
             </el-tag>
+            <el-tooltip 
+              :content="autoRefreshEnabled ? `自动刷新已启用（${autoRefreshInterval}秒）` : '自动刷新已停用'" 
+              placement="bottom"
+            >
+              <el-button 
+                :type="autoRefreshEnabled ? 'primary' : 'default'" 
+                :icon="autoRefreshEnabled ? 'VideoPlay' : 'VideoPause'"
+                size="small"
+                circle
+                @click="toggleAutoRefresh"
+              />
+            </el-tooltip>
           </div>
 
           <!-- 搜索框 -->
