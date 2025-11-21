@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useContactStore } from '@/stores/contact'
 import { useChatroomStore } from '@/stores/chatroom'
@@ -157,7 +157,7 @@ const getMemberDisplayNameSync = (member: ChatroomMember) => {
 // 刷新群聊详情
 const refreshChatroomDetail = async () => {
   if (!props.contactId) return
-  await chatroomStore.refreshCache(props.contactId)
+  await chatroomStore.getChatroomDetail(props.contactId, false)
   await loadChatroomDetail()
   await loadMemberDisplayNames()
 }

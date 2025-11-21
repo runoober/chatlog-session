@@ -2,7 +2,6 @@
 import { computed, ref, watch } from 'vue'
 import type { Session, SessionDetail } from '@/types'
 import { useDisplayName } from './composables'
-import { useChatStore } from '@/stores/chat'
 import { useChatroomStore } from '@/stores/chatroom'
 
 interface Props {
@@ -25,7 +24,6 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<Emits>()
 
-const chatStore = useChatStore()
 const chatroomStore = useChatroomStore()
 
 // 群聊成员数量

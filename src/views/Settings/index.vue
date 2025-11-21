@@ -376,10 +376,7 @@ const restartOnboarding = async () => {
   }
 }
 
-// 返回
-const goBack = () => {
-  router.back()
-}
+
 </script>
 
 <template>
