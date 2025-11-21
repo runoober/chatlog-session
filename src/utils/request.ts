@@ -131,7 +131,7 @@ service.interceptors.request.use(
     }
 
     // 开发环境日志或用户开启了 API 调试
-    const enableDebug = import.meta.env.VITE_ENABLE_DEBUG === 'true' || settings.enableApiDebug
+    const enableDebug = import.meta.env.VITE_ENABLE_DEBUG === 'true' || settings.enableDebug
     if (import.meta.env.DEV && enableDebug) {
       console.log('📤 API Request:', config.method?.toUpperCase(), (config.baseURL || '') + (config.url || ''))
       console.log('📤 Request Params:', config.params || config.data)
@@ -163,7 +163,7 @@ service.interceptors.response.use(
 
     // 开发环境日志或用户开启了 API 调试
     const settings = getSettings()
-    const enableDebug = import.meta.env.VITE_ENABLE_DEBUG === 'true' || settings.enableApiDebug
+    const enableDebug = import.meta.env.VITE_ENABLE_DEBUG === 'true' || settings.enableDebug
     if (import.meta.env.DEV && enableDebug) {
       const duration = response.config.metadata?.startTime 
         ? Date.now() - response.config.metadata.startTime 
@@ -206,7 +206,7 @@ service.interceptors.response.use(
   },
   async (error: AxiosError<ApiError>) => {
     const settings = getSettings()
-    const enableDebug = import.meta.env.VITE_ENABLE_DEBUG === 'true' || settings.enableApiDebug
+    const enableDebug = import.meta.env.VITE_ENABLE_DEBUG === 'true' || settings.enableDebug
     const config = error.config as InternalAxiosRequestConfig
     
     // 获取重试配置

@@ -16,7 +16,6 @@ const settings = ref({
   apiTimeout: 30000,
   apiRetryCount: 3,
   apiRetryDelay: 1000,
-  enableApiDebug: false,
 
   // 外观设置
   theme: appStore.isDark ? 'dark' : 'light',
@@ -43,7 +42,6 @@ const settings = ref({
   compressImages: true,
 
   // 高级设置
-  enableDebug: false,
   cacheSize: '100MB'
 })
 
@@ -171,7 +169,7 @@ const resetApiSettings = () => {
   settings.value.apiTimeout = 30000
   settings.value.apiRetryCount = 3
   settings.value.apiRetryDelay = 1000
-  settings.value.enableApiDebug = false
+  appStore.config.enableDebug = false
   saveSettings()
   ElMessage.success('API 设置已重置')
 }
@@ -196,7 +194,7 @@ const loadSettings = () => {
       if (parsed.apiTimeout !== undefined) settings.value.apiTimeout = parsed.apiTimeout
       if (parsed.apiRetryCount !== undefined) settings.value.apiRetryCount = parsed.apiRetryCount
       if (parsed.apiRetryDelay !== undefined) settings.value.apiRetryDelay = parsed.apiRetryDelay
-      if (parsed.enableApiDebug !== undefined) settings.value.enableApiDebug = parsed.enableApiDebug
+      if (parsed.enableDebug !== undefined) appStore.config.enableDebug = parsed.enableDebug
 
       if (parsed.theme !== undefined) settings.value.theme = parsed.theme
       if (parsed.language !== undefined) settings.value.language = parsed.language
@@ -218,7 +216,6 @@ const loadSettings = () => {
       if (parsed.autoDownloadMedia !== undefined) settings.value.autoDownloadMedia = parsed.autoDownloadMedia
       if (parsed.compressImages !== undefined) settings.value.compressImages = parsed.compressImages
 
-      if (parsed.enableDebug !== undefined) settings.value.enableDebug = parsed.enableDebug
       if (parsed.cacheSize !== undefined) settings.value.cacheSize = parsed.cacheSize
 
       console.log('[Settings] 已加载保存的配置')
@@ -238,22 +235,7 @@ onMounted(() => {
 
 // 切换主题
 const handleThemeChange = (theme: string) => {
-  if (theme === 'dark') {
-    appStore.toggleTheme()
-    if (!appStore.isDark) {
-      appStore.toggleTheme()
-    }
-  } else if (theme === 'light') {
-    if (appStore.isDark) {
-      appStore.toggleTheme()
-    }
-  } else {
-    // 跟随系统
-    const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    if (isDark !== appStore.isDark) {
-      appStore.toggleTheme()
-    }
-  }
+  appStore.updateSettings({ theme: theme as 'light' | 'dark' | 'auto' })
   ElMessage.success('主题已切换')
 }
 
@@ -267,13 +249,22 @@ const saveSettings = () => {
   // 保存 apiBaseUrl 到独立的 key（与 Onboarding 统一）
   localStorage.setItem('apiBaseUrl', settings.value.apiBaseUrl)
 
-  // 保存其他设置到 chatlog-settings
-  localStorage.setItem('chatlog-settings', JSON.stringify(settings.value))
+  // 保存其他设置到 chatlog-settings（包含 enableDebug）
+  const settingsToSave = {
+    ...settings.value,
+    enableDebug: appStore.config.enableDebug
+  }
+  localStorage.setItem('chatlog-settings', JSON.stringify(settingsToSave))
 
   // 同步用户设置到 appStore
   appStore.updateSettings({
     showMediaResources: settings.value.showMediaResources
   })
+
+  // 触发自定义事件，通知其他组件设置已更新
+  window.dispatchEvent(new CustomEvent('chatlog-settings-updated', {
+    detail: settingsToSave
+  }))
 
   ElMessage.success('设置已保存')
 }
@@ -297,7 +288,6 @@ const resetSettings = async () => {
       apiTimeout: 30000,
       apiRetryCount: 3,
       apiRetryDelay: 1000,
-      enableApiDebug: false,
       theme: 'light',
       language: 'zh-CN',
       fontSize: 'medium',
@@ -314,9 +304,9 @@ const resetSettings = async () => {
       saveHistory: true,
       autoDownloadMedia: true,
       compressImages: true,
-      enableDebug: false,
       cacheSize: '100MB'
     }
+    appStore.config.enableDebug = false
 
     localStorage.removeItem('chatlog-settings')
     ElMessage.success('设置已重置')
@@ -505,9 +495,9 @@ const goBack = () => {
               <el-divider />
 
               <el-form-item label="调试模式">
-                <el-switch v-model="settings.enableApiDebug" />
+                <el-switch v-model="appStore.config.enableDebug" />
                 <el-text type="info" size="small" style="margin-left: 12px">
-                  在控制台输出 API 请求详情
+                  在控制台输出 API 请求详情和调试信息
                 </el-text>
               </el-form-item>
 
@@ -727,19 +717,8 @@ const goBack = () => {
 
             <el-form label-position="left" label-width="120px">
               <el-form-item label="调试模式">
-                <el-switch v-model="settings.enableDebug" />
-                <span class="form-tip">显示详细的调试信息</span>
-              </el-form-item>
-
-              <el-form-item label="API 超时">
-                <el-input-number
-                  v-model="settings.apiTimeout"
-                  :min="5000"
-                  :max="60000"
-                  :step="1000"
-                  style="width: 200px"
-                />
-                <span class="form-tip">毫秒</span>
+                <el-switch v-model="appStore.config.enableDebug" />
+                <span class="form-tip">在控制台输出 API 请求详情和调试信息</span>
               </el-form-item>
 
               <el-form-item label="缓存大小">

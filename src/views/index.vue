@@ -44,6 +44,27 @@ const isActive = (view: ViewType) => {
   return currentView.value === view
 }
 
+// 主题切换提示文本
+const themeTooltipText = computed(() => {
+  const currentTheme = appStore.settings.theme
+  if (currentTheme === 'light') {
+    return '切换到暗色'
+  } else if (currentTheme === 'dark') {
+    return '切换到随系统'
+  } else {
+    return '切换到亮色'
+  }
+})
+
+// 主题图标
+const themeIcon = computed(() => {
+  const currentTheme = appStore.settings.theme
+  if (currentTheme === 'auto') {
+    return 'Monitor'
+  }
+  return appStore.isDark ? 'Moon' : 'Sunny'
+})
+
 // 当前视图组件
 const CurrentViewComponent = computed(() => {
   switch (currentView.value) {
@@ -130,10 +151,10 @@ const CurrentViewComponent = computed(() => {
           </div>
         </el-tooltip>
 
-        <el-tooltip :content="appStore.isDark ? '切换到亮色' : '切换到暗色'" placement="right">
+        <el-tooltip :content="themeTooltipText" placement="right">
           <div class="nav-item" @click="appStore.toggleTheme">
             <el-icon size="24">
-              <component :is="appStore.isDark ? 'Sunny' : 'Moon'" />
+              <component :is="themeIcon" />
             </el-icon>
           </div>
         </el-tooltip>

@@ -210,6 +210,44 @@ const loadAutoRefreshSettings = () => {
   }
 }
 
+// 监听设置更新事件（从 Settings 页面同步）
+const handleSettingsUpdate = (e: Event) => {
+  const customEvent = e as CustomEvent
+  const newSettings = customEvent.detail
+  
+  if (newSettings) {
+    const oldEnabled = autoRefreshEnabled.value
+    const oldInterval = autoRefreshInterval.value
+    
+    if (newSettings.autoRefresh !== undefined) {
+      autoRefreshEnabled.value = newSettings.autoRefresh
+    }
+    if (newSettings.autoRefreshInterval !== undefined) {
+      autoRefreshInterval.value = newSettings.autoRefreshInterval
+    }
+    
+    // 如果设置发生变化，显示提示
+    if (oldEnabled !== autoRefreshEnabled.value || oldInterval !== autoRefreshInterval.value) {
+      console.log('🔄 自动刷新设置已更新:', {
+        enabled: autoRefreshEnabled.value,
+        interval: autoRefreshInterval.value
+      })
+    }
+  }
+}
+
+// 监听 localStorage 变化（跨标签页同步）
+const handleStorageChange = (e: StorageEvent) => {
+  if (e.key === 'chatlog-settings' && e.newValue) {
+    try {
+      const parsed = JSON.parse(e.newValue)
+      handleSettingsUpdate(new CustomEvent('chatlog-settings-updated', { detail: parsed }))
+    } catch (err) {
+      console.error('处理 storage 变化失败:', err)
+    }
+  }
+}
+
 // 监听设置变化
 watch([autoRefreshEnabled, autoRefreshInterval], () => {
   if (autoRefreshEnabled.value) {
@@ -311,6 +349,12 @@ onMounted(async () => {
     startAutoRefresh()
   }
   
+  // 监听设置更新事件（同一页面内同步）
+  window.addEventListener('chatlog-settings-updated', handleSettingsUpdate)
+  
+  // 监听 localStorage 变化（跨标签页同步）
+  window.addEventListener('storage', handleStorageChange)
+  
   // 检查数据库中是否有联系人数据
   // 如果为空，自动启动后台加载
   try {
@@ -339,6 +383,10 @@ onMounted(async () => {
 onUnmounted(() => {
   // 组件卸载时停止自动刷新
   stopAutoRefresh()
+  
+  // 移除事件监听
+  window.removeEventListener('chatlog-settings-updated', handleSettingsUpdate)
+  window.removeEventListener('storage', handleStorageChange)
 })
 </script>
 

@@ -5,6 +5,10 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { UserSettings, AppConfig } from '@/types'
 
+// 系统主题监听器引用
+let systemThemeMediaQuery: MediaQueryList | null = null
+let systemThemeListener: ((e: MediaQueryListEvent) => void) | null = null
+
 /**
  * 导航栈项
  */
@@ -152,12 +156,8 @@ export const useAppStore = defineStore('app', () => {
     // 监听窗口大小变化
     window.addEventListener('resize', checkMobile)
 
-    // 监听系统主题变化
-    if (settings.value.theme === 'auto') {
-      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme)
-    }
-
-    // 应用主题
+    // 设置主题监听器并应用主题
+    setupThemeListener()
     applyTheme()
 
     if (isDebug.value) {
@@ -179,6 +179,15 @@ export const useAppStore = defineStore('app', () => {
         const parsed = JSON.parse(saved)
         settings.value = { ...settings.value, ...parsed }
       }
+
+      // 从 chatlog-settings 加载 enableDebug（与 Settings 页面统一）
+      const chatlogSettings = localStorage.getItem('chatlog-settings')
+      if (chatlogSettings) {
+        const parsed = JSON.parse(chatlogSettings)
+        if (parsed.enableDebug !== undefined) {
+          config.value.enableDebug = parsed.enableDebug
+        }
+      }
     } catch (err) {
       console.error('Failed to load settings:', err)
     }
@@ -199,12 +208,35 @@ export const useAppStore = defineStore('app', () => {
    * 更新设置
    */
   function updateSettings(newSettings: Partial<UserSettings>) {
+    const oldTheme = settings.value.theme
     settings.value = { ...settings.value, ...newSettings }
     saveSettings()
 
-    // 如果更新了主题，应用主题
-    if (newSettings.theme) {
+    // 如果更新了主题，重新设置监听器并应用主题
+    if (newSettings.theme && newSettings.theme !== oldTheme) {
+      setupThemeListener()
       applyTheme()
+    }
+  }
+
+  /**
+   * 设置系统主题监听器
+   */
+  function setupThemeListener() {
+    // 移除旧的监听器
+    if (systemThemeMediaQuery && systemThemeListener) {
+      systemThemeMediaQuery.removeEventListener('change', systemThemeListener)
+      systemThemeMediaQuery = null
+      systemThemeListener = null
+    }
+
+    // 如果是 auto 模式，添加新的监听器
+    if (settings.value.theme === 'auto') {
+      systemThemeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+      systemThemeListener = () => {
+        applyTheme()
+      }
+      systemThemeMediaQuery.addEventListener('change', systemThemeListener)
     }
   }
 
