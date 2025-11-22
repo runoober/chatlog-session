@@ -48,6 +48,18 @@ const handleSearch = () => {
 const handleMore = () => {
   emit('more')
 }
+
+// 处理下拉菜单命令（在模板中使用）
+const handleDropdownCommand = (command: string) => {
+  switch (command) {
+    case 'search':
+      handleSearch()
+      break
+    case 'more':
+      handleMore()
+      break
+  }
+}
 </script>
 
 <template>
@@ -86,29 +98,34 @@ const handleMore = () => {
         </el-icon>
       </el-button>
       
-      <el-button
-        v-if="showSearch"
-        class="action-button"
-        text
-        circle
-        @click="handleSearch"
+      <!-- 三点菜单 -->
+      <el-dropdown
+        v-if="showSearch || showMore"
+        trigger="click"
+        @command="handleDropdownCommand"
       >
-        <el-icon :size="18">
-          <Search />
-        </el-icon>
-      </el-button>
-      
-      <el-button
-        v-if="showMore"
-        class="action-button"
-        text
-        circle
-        @click="handleMore"
-      >
-        <el-icon :size="18">
-          <More />
-        </el-icon>
-      </el-button>
+        <el-button
+          class="action-button"
+          text
+          circle
+        >
+          <el-icon :size="18">
+            <More />
+          </el-icon>
+        </el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item v-if="showSearch" command="search">
+              <el-icon><Search /></el-icon>
+              <span>搜索消息</span>
+            </el-dropdown-item>
+            <el-dropdown-item v-if="showMore" command="more">
+              <el-icon><InfoFilled /></el-icon>
+              <span>会话详情</span>
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
     </div>
   </div>
 </template>

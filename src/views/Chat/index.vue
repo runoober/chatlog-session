@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, watchEffect } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useSessionStore } from '@/stores/session'
 import { useContactStore } from '@/stores/contact'
 import { useChatStore } from '@/stores/chat'
+import { useChatroomStore } from '@/stores/chatroom'
 import SessionList from '@/components/chat/SessionList.vue'
 import MessageList from '@/components/chat/MessageList.vue'
 import ChatHeader from '@/components/chat/ChatHeader.vue'
 import MobileNavBar from '@/components/layout/MobileNavBar.vue'
 import SearchDialog from '@/components/chat/SearchDialog.vue'
+import ContactDetail from '@/views/Contact/ContactDetail.vue'
 import { useDisplayName } from '@/components/chat/composables'
 import type { Session, Message } from '@/types'
 import { ElMessage } from 'element-plus'
@@ -17,7 +19,7 @@ const appStore = useAppStore()
 const sessionStore = useSessionStore()
 const contactStore = useContactStore()
 const chatStore = useChatStore()
-
+const chatroomStore = useChatroomStore()
 // 引用
 const sessionListRef = ref()
 const messageListComponent = ref()
@@ -45,8 +47,14 @@ const { displayName: mobileDisplayName } = useDisplayName({
 })
 
 // 移动端副标题（显示会话类型和消息数）
-const mobileSubtitle = computed(() => {
-  if (!currentSession.value || !appStore.isMobile) return ''
+const mobileSubtitle = ref('')
+
+// 监听会话变化，更新副标题
+watchEffect(async () => {
+  if (!currentSession.value || !appStore.isMobile) {
+    mobileSubtitle.value = ''
+    return
+  }
 
   const parts: string[] = []
 
@@ -63,13 +71,22 @@ const mobileSubtitle = computed(() => {
       break
   }
 
-  // 显示消息总数
-  const messageCount = chatStore.messages.length
-  if (messageCount > 0) {
-    parts.push(`${messageCount}条消息`)
+  // 根据会话类型显示不同信息
+  if (currentSession.value.type === 'group') {
+    // 群聊显示群人数（需要从 store 获取）
+    const memberCount = await chatroomStore.getChatroomMemberCount(currentSession.value.id)
+    if (memberCount > 0) {
+      parts.push(`${memberCount}人`)
+    }
+  } else {
+    // 非群聊显示消息总数
+    const messageCount = chatStore.messages.length
+    if (messageCount > 0) {
+      parts.push(`${messageCount}条消息`)
+    }
   }
 
-  return parts.join(' · ')
+  mobileSubtitle.value = parts.join(' · ')
 })
 
 // 自动刷新相关
@@ -83,7 +100,7 @@ const handleSessionSelect = (session: Session) => {
   console.log('📱 选中会话:', session.id, session.lastTime)
   // 直接使用 session.lastTime 作为时间参数
   currentSessionTime.value = session.lastTime
-  
+
   // 移动端：导航到消息列表页
   if (appStore.isMobile) {
     appStore.navigateToDetail('messageList', { sessionId: session.id })
@@ -119,7 +136,7 @@ const handleSearchMessageClick = (message: Message) => {
       handleSessionSelect(targetSession)
     }
   }
-  
+
   // 定位到消息
   if (message.id) {
     setTimeout(() => {
@@ -128,11 +145,55 @@ const handleSearchMessageClick = (message: Message) => {
   }
 }
 
+// 会话详情抽屉
+const sessionDetailDrawerVisible = ref(false)
 
+// 根据会话类型获取联系人 ID
+const sessionDetailContactId = computed(() => {
+  if (!currentSession.value) return ''
+  
+  // 对于群聊，使用 talker（群 ID）
+  // 对于私聊，使用 talker（对方的 wxid）
+  // talker 字段包含了实际的联系人 wxid 或群 ID
+  return currentSession.value.talker || currentSession.value.id
+})
+
+// 会话详情抽屉标题
+const sessionDetailDrawerTitle = computed(() => {
+  if (!currentSession.value) return '会话详情'
+  
+  // 优先使用 displayName，然后使用 remark、name、talkerName
+  const name = mobileDisplayName.value || 
+               currentSession.value.remark || 
+               currentSession.value.name || 
+               currentSession.value.talkerName
+  
+  return name || '会话详情'
+})
+
+// 处理显示会话详情
+const handleShowSessionDetail = () => {
+  if (!currentSession.value) {
+    ElMessage.warning('请先选择一个会话')
+    return
+  }
+  
+  // 调试信息
+  console.log('🔍 打开会话详情')
+  console.log('currentSession:', currentSession.value)
+  console.log('sessionDetailContactId:', sessionDetailContactId.value)
+  console.log('contactStore.contacts 数量:', contactStore.contacts.length)
+  
+  // 查找匹配的联系人
+  const matchedContact = contactStore.contacts.find(c => c.wxid === sessionDetailContactId.value)
+  console.log('找到的联系人:', matchedContact)
+  
+  sessionDetailDrawerVisible.value = true
+}
 
 // 手动刷新数据（刷新会话列表和消息列表）
 const handleRefresh = () => {
-  sessionListRef.value?.refresh()
+  //sessionListRef.value?.refresh()
   messageListComponent.value?.refresh()
 }
 
@@ -152,7 +213,7 @@ const startAutoRefresh = () => {
   if (autoRefreshTimer.value) {
     clearInterval(autoRefreshTimer.value)
   }
-  
+
   if (autoRefreshEnabled.value && autoRefreshInterval.value > 0) {
     console.log(`🔄 启动自动刷新，间隔: ${autoRefreshInterval.value}秒`)
     autoRefreshTimer.value = window.setInterval(() => {
@@ -180,7 +241,7 @@ const stopAutoRefresh = () => {
 const toggleAutoRefresh = () => {
   autoRefreshEnabled.value = !autoRefreshEnabled.value
   saveAutoRefreshSettings()
-  
+
   if (autoRefreshEnabled.value) {
     ElMessage.success(`已启用自动刷新（${autoRefreshInterval.value}秒）`)
     startAutoRefresh()
@@ -227,18 +288,18 @@ const loadAutoRefreshSettings = () => {
 const handleSettingsUpdate = (e: Event) => {
   const customEvent = e as CustomEvent
   const newSettings = customEvent.detail
-  
+
   if (newSettings) {
     const oldEnabled = autoRefreshEnabled.value
     const oldInterval = autoRefreshInterval.value
-    
+
     if (newSettings.autoRefresh !== undefined) {
       autoRefreshEnabled.value = newSettings.autoRefresh
     }
     if (newSettings.autoRefreshInterval !== undefined) {
       autoRefreshInterval.value = newSettings.autoRefreshInterval
     }
-    
+
     // 如果设置发生变化，显示提示
     if (oldEnabled !== autoRefreshEnabled.value || oldInterval !== autoRefreshInterval.value) {
       console.log('🔄 自动刷新设置已更新:', {
@@ -288,11 +349,11 @@ const chatPageRef = ref<HTMLElement | null>(null)
 // 处理触摸开始
 const handleTouchStart = (e: TouchEvent) => {
   if (!appStore.isMobile || !appStore.showMessageList) return
-  
+
   const touch = e.touches[0]
   touchStartX.value = touch.clientX
   touchCurrentX.value = touch.clientX
-  
+
   // 只在左边缘20px内触发
   if (touch.clientX < 20) {
     isDragging.value = true
@@ -302,15 +363,15 @@ const handleTouchStart = (e: TouchEvent) => {
 // 处理触摸移动
 const handleTouchMove = (e: TouchEvent) => {
   if (!isDragging.value) return
-  
+
   const touch = e.touches[0]
   touchCurrentX.value = touch.clientX
   const deltaX = touchCurrentX.value - touchStartX.value
-  
+
   // 只允许向右滑动
   if (deltaX > 0) {
     e.preventDefault()
-    
+
     if (chatPageRef.value) {
       const panel = chatPageRef.value.querySelector('.message-panel') as HTMLElement
       if (panel) {
@@ -325,15 +386,15 @@ const handleTouchMove = (e: TouchEvent) => {
 // 处理触摸结束
 const handleTouchEnd = () => {
   if (!isDragging.value) return
-  
+
   const deltaX = touchCurrentX.value - touchStartX.value
   const threshold = window.innerWidth * 0.3
-  
+
   if (chatPageRef.value) {
     const panel = chatPageRef.value.querySelector('.message-panel') as HTMLElement
     if (panel) {
       panel.style.transition = 'transform 0.3s ease-out'
-      
+
       if (deltaX > threshold) {
         // 完成返回
         panel.style.transform = `translateX(100%)`
@@ -347,7 +408,7 @@ const handleTouchEnd = () => {
       }
     }
   }
-  
+
   isDragging.value = false
   touchStartX.value = 0
   touchCurrentX.value = 0
@@ -356,18 +417,18 @@ const handleTouchEnd = () => {
 onMounted(async () => {
   // 加载自动刷新设置
   loadAutoRefreshSettings()
-  
+
   // 如果启用了自动刷新，启动定时器
   if (autoRefreshEnabled.value) {
     startAutoRefresh()
   }
-  
+
   // 监听设置更新事件（同一页面内同步）
   window.addEventListener('chatlog-settings-updated', handleSettingsUpdate)
-  
+
   // 监听 localStorage 变化（跨标签页同步）
   window.addEventListener('storage', handleStorageChange)
-  
+
   // 检查数据库中是否有联系人数据
   // 如果为空，自动启动后台加载
   try {
@@ -396,7 +457,7 @@ onMounted(async () => {
 onUnmounted(() => {
   // 组件卸载时停止自动刷新
   stopAutoRefresh()
-  
+
   // 移除事件监听
   window.removeEventListener('chatlog-settings-updated', handleSettingsUpdate)
   window.removeEventListener('storage', handleStorageChange)
@@ -404,9 +465,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div 
+  <div
     ref="chatPageRef"
-    class="chat-page" 
+    class="chat-page"
     :class="{ 'mobile-page': appStore.isMobile }"
     @touchstart="handleTouchStart"
     @touchmove="handleTouchMove"
@@ -414,10 +475,10 @@ onUnmounted(() => {
   >
     <div class="chat-container">
       <!-- 会话列表区域 -->
-      <div 
-        class="session-panel" 
-        :class="{ 
-          'mobile-hidden': appStore.isMobile && appStore.showMessageList 
+      <div
+        class="session-panel"
+        :class="{
+          'mobile-hidden': appStore.isMobile && appStore.showMessageList
         }"
       >
         <div class="session-header">
@@ -426,12 +487,12 @@ onUnmounted(() => {
             <el-tag v-if="sessionStore.totalUnreadCount > 0" size="small">
               {{ sessionStore.totalUnreadCount }}
             </el-tag>
-            <el-tooltip 
-              :content="autoRefreshEnabled ? `自动刷新已启用（${autoRefreshInterval}秒）` : '自动刷新已停用'" 
+            <el-tooltip
+              :content="autoRefreshEnabled ? `自动刷新已启用（${autoRefreshInterval}秒）` : '自动刷新已停用'"
               placement="bottom"
             >
-              <el-button 
-                :type="autoRefreshEnabled ? 'primary' : 'default'" 
+              <el-button
+                :type="autoRefreshEnabled ? 'primary' : 'default'"
                 :icon="autoRefreshEnabled ? 'VideoPlay' : 'VideoPause'"
                 size="small"
                 circle
@@ -473,7 +534,7 @@ onUnmounted(() => {
       </div>
 
       <!-- 消息区域 -->
-      <div 
+      <div
         class="message-panel"
         :class="{
           'mobile-visible': appStore.isMobile && appStore.showMessageList
@@ -487,9 +548,11 @@ onUnmounted(() => {
           :show-back="true"
           :show-refresh="true"
           :show-search="true"
+          :show-more="true"
           @back="handleMobileBack"
           @refresh="handleRefreshMessages"
           @search="handleSearchMessages"
+          @more="handleShowSessionDetail"
         />
 
         <!-- 未选中会话时的欢迎页 -->
@@ -531,7 +594,7 @@ onUnmounted(() => {
             @refresh="handleRefresh"
             @search="handleSearchMessages"
             @export="() => {}"
-            @info="() => {}"
+            @info="handleShowSessionDetail"
           />
 
           <!-- 搜索对话框 -->
@@ -541,6 +604,21 @@ onUnmounted(() => {
             :session-name="currentSession?.name || currentSession?.talkerName || ''"
             @message-click="handleSearchMessageClick"
           />
+
+          <!-- 会话详情抽屉 -->
+          <el-drawer
+            v-model="sessionDetailDrawerVisible"
+            :title="sessionDetailDrawerTitle"
+            :size="appStore.isMobile ? '100%' : '500px'"
+            direction="rtl"
+          >
+            <ContactDetail
+              v-if="sessionDetailDrawerVisible && sessionDetailContactId"
+              :contact-id="sessionDetailContactId"
+              :session="currentSession"
+              :hide-nav-bar="true"
+            />
+          </el-drawer>
 
           <!-- 消息列表 -->
           <MessageList

@@ -8,9 +8,13 @@ import MobileNavBar from '@/components/layout/MobileNavBar.vue'
 import Avatar from '@/components/common/Avatar.vue'
 import type { Contact } from '@/types'
 import type { Chatroom, ChatroomMember } from '@/types/contact'
+import { ContactType } from '@/types/contact'
+import type { Session } from '@/types/session'
 
 interface Props {
   contactId?: string
+  session?: Session
+  hideNavBar?: boolean
 }
 
 const props = defineProps<Props>()
@@ -34,8 +38,47 @@ const { displayName: ownerDisplayName } = useDisplayName({
 
 // 加载联系人详情
 const loadContact = async () => {
+  console.log('🔍 ContactDetail.loadContact')
+  console.log('props.contactId:', props.contactId)
+  console.log('props.session:', props.session)
+  console.log('contactStore.contacts 数量:', contactStore.contacts.length)
+  
   if (props.contactId) {
     contact.value = contactStore.contacts.find(c => c.wxid === props.contactId) || null
+    console.log('找到的 contact:', contact.value)
+    
+    // 如果没找到联系人，尝试从 API 加载
+    if (!contact.value) {
+      console.log('⚠️ 在 contactStore.contacts 中未找到联系人，尝试从 store 加载')
+      try {
+        // 尝试通过 contactStore 获取联系人
+        await contactStore.loadContacts()
+        contact.value = contactStore.contacts.find(c => c.wxid === props.contactId) || null
+        console.log('重新加载后找到的 contact:', contact.value)
+      } catch (err) {
+        console.error('加载联系人失败:', err)
+      }
+    }
+    
+    // 如果还是没找到，但有 session 数据，从 session 构造联系人
+    if (!contact.value && props.session) {
+      console.log('📝 从 session 数据构造联系人')
+      contact.value = {
+        wxid: props.contactId,
+        nickname: props.session.talkerName || props.session.name || props.contactId,
+        remark: props.session.remark || props.session.name || '',
+        alias: '',
+        avatar: props.session.avatar || '',
+        type: (props.session.type === 'group' ? ContactType.Chatroom : 
+              props.session.type === 'official' ? ContactType.Official : ContactType.Friend) as ContactType,
+        isStarred: props.session.isPinned || false,
+        gender: 0,
+        province: '',
+        city: '',
+        signature: ''
+      }
+      console.log('构造的 contact:', contact.value)
+    }
     
     // 如果是群聊，加载群聊详情
     if (contact.value && contact.value.type === 'chatroom') {
@@ -63,8 +106,8 @@ const loadChatroomDetail = async () => {
   }
 }
 
-// 监听 contactId 变化
-watch(() => props.contactId, () => {
+// 监听 contactId 或 session 变化
+watch(() => [props.contactId, props.session], () => {
   loadContact()
 }, { immediate: true })
 
