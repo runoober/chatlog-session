@@ -94,11 +94,16 @@ export const usePWAStore = defineStore('pwa', () => {
       // 监听在线/离线状态
       setupOnlineStatusListeners()
 
-      // 注册 Service Worker（仅生产环境）
-      if (import.meta.env.PROD) {
+      // 注册 Service Worker（仅生产环境或强制开启）
+      const forceSW = localStorage.getItem('pwa_force_sw') === 'true'
+
+      if (import.meta.env.PROD || forceSW) {
+        if (forceSW && !import.meta.env.PROD) {
+          console.warn('[PWA Store] ⚠️ Forcing SW registration in dev mode')
+        }
         await swManager.value.register()
       } else {
-        console.log('[PWA Store] Skipping SW registration in dev mode')
+        console.log('[PWA Store] Skipping SW registration in dev mode (set localStorage.pwa_force_sw=true to enable)')
       }
 
       console.log('[PWA Store] Initialized successfully')
