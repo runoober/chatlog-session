@@ -559,20 +559,6 @@ const forwardedMessages = computed(() => {
     text-align: center;
   }
 
-  &__virtual {
-    padding: 4px 12px;
-    background-color: rgba(255, 193, 7, 0.1);
-    border: 1px dashed var(--el-color-warning);
-    border-radius: 4px;
-    font-size: 12px;
-    color: var(--el-color-warning);
-    text-align: center;
-
-    .virtual-text {
-      font-family: 'Monaco', 'Courier New', monospace;
-    }
-  }
-
   &__avatar {
     flex-shrink: 0;
     margin: 0 12px;

@@ -10,7 +10,7 @@ import type { SearchParams } from '@/types/api'
 import { useAppStore } from './app'
 import { useMessageCacheStore } from './messageCache'
 import { useAutoRefreshStore } from './autoRefresh'
-import { toCST, formatCSTRange, subtractDays, formatCSTDate } from '@/utils/timezone'
+import { toCST, formatCSTRange, subtractDays } from '@/utils/timezone'
 
 /**
  * 获取消息列表中最新消息的东八区时间
@@ -402,6 +402,7 @@ export const useChatStore = defineStore('chat', () => {
    * 加载更多消息
    */
   async function loadMoreMessages() {
+    console.error('loadMoreMessages called')
     if (!hasMore.value || loading.value || !currentTalker.value) {
       return
     }
@@ -437,6 +438,8 @@ export const useChatStore = defineStore('chat', () => {
 
       let result: Message[] = []
       let finalTimeRange = ''
+      let retryCount = 0
+      let daysRange = 0
 
       // 如果传入了 existingTimeRange（分页加载），直接使用该时间范围
       if (existingTimeRange && offset > 0) {
@@ -521,9 +524,7 @@ export const useChatStore = defineStore('chat', () => {
         }
 
         const density = calculateMessageDensity()
-        let daysRange = getInitialDaysRange()
-        let retryCount = 0
-        const maxRetries = 3
+        daysRange = getInitialDaysRange()
 
         if (appStore.isDebug) {
           console.log('🔍 Load new time range:', {
@@ -536,6 +537,8 @@ export const useChatStore = defineStore('chat', () => {
         }
 
         // 智能加倍策略：最多重试 3 次
+        retryCount = 0
+        const maxRetries = 3
         while (result.length === 0 && retryCount < maxRetries) {
           const startDate = subtractDays(beforeDate, daysRange)
 
@@ -566,18 +569,36 @@ export const useChatStore = defineStore('chat', () => {
       // 如果返回空结果
       if (result.length === 0) {
         if (offset === 0) {
-          // 首次加载（offset=0）且重试后仍然没有消息，显示提示
-          const beforeDate = typeof beforeTime === 'string'
-            ? new Date(beforeTime)
-            : new Date(beforeTime * 1000)
-          const message = `${formatDateYMD(beforeDate)} 附近没有消息，再次下拉尝试加载更早信息`
-          historyLoadMessage.value = message
+          // 首次加载（offset=0）且重试后仍然没有消息
+          // 插入 EmptyRange 消息标记这个空时间范围
+          const suggestedBeforeTime = parseTimeRangeStart(finalTimeRange)
+          const newestMsgTime = getFirstMessageTime(messages.value.filter(m => m.talker === talker))
+          const emptyRangeMessage = createEmptyRangeMessage(
+            talker,
+            finalTimeRange,
+            newestMsgTime,
+            retryCount,
+            suggestedBeforeTime
+          )
 
           if (appStore.isDebug) {
-            console.log('ℹ️ No messages found after retries:', message)
+            console.log('📝 EmptyRange message created for empty history:', {
+              talker,
+              timeRange: finalTimeRange,
+              triedTimes: retryCount,
+              suggestedBeforeTime: new Date(suggestedBeforeTime).toISOString()
+            })
           }
 
-          return { messages: [], hasMore: true, timeRange: finalTimeRange, offset: 0 }
+          // 插入 EmptyRange 到消息列表头部
+          messages.value = [emptyRangeMessage, ...messages.value]
+
+          return {
+            messages: [emptyRangeMessage],
+            hasMore: true,
+            timeRange: finalTimeRange,
+            offset: 0
+          }
         } else {
           // 分页加载（offset>0）返回空结果，说明当前时间范围已加载完
           if (appStore.isDebug) {
@@ -629,8 +650,55 @@ export const useChatStore = defineStore('chat', () => {
         })
       }
 
+      // 检测时间间隙：如果请求的时间范围起点和返回的最早消息之间有间隙，插入 EmptyRange
+      let emptyRangeToInsert: Message | null = null
+      if (offset === 0 && finalTimeRange) {
+        // 只在首次加载（offset=0）时检测间隙
+        const requestedStartTime = parseTimeRangeStart(finalTimeRange)
+        const oldestReturnedMsg = uniqueNewMessages[0]
+        const oldestMsgTime = oldestReturnedMsg.time
+          ? new Date(oldestReturnedMsg.time).getTime()
+          : oldestReturnedMsg.createTime * 1000
+
+        // 计算时间差（秒）
+        const timeDiffSeconds = (oldestMsgTime - requestedStartTime) / 1000
+        const gapThresholdSeconds = 600 // 600sec
+
+        if (timeDiffSeconds > gapThresholdSeconds) {
+          // 存在显著的时间间隙，创建 EmptyRange 标记
+          const gapStartDate = new Date(requestedStartTime)
+          const gapEndDate = new Date(oldestMsgTime)
+          const gapTimeRange = formatCSTRange(gapStartDate, gapEndDate)
+
+          const newestMsgTime = oldestReturnedMsg.time
+          emptyRangeToInsert = createEmptyRangeMessage(
+            talker,
+            gapTimeRange,
+            newestMsgTime,
+            0, // triedTimes = 0 表示这是自动检测的间隙
+            requestedStartTime
+          )
+
+          if (appStore.isDebug) {
+            console.log('📝 EmptyRange detected for time gap:', {
+              talker,
+              requestedStartTime: new Date(requestedStartTime).toISOString(),
+              oldestMsgTime: new Date(oldestMsgTime).toISOString(),
+              gapDays: (timeDiffSeconds / 86400).toFixed(1),
+              gapTimeRange,
+              suggestedBeforeTime: new Date(requestedStartTime).toISOString()
+            })
+          }
+        }
+      }
+
       // 追加到消息列表头部（历史消息在前）
-      messages.value = [...uniqueNewMessages, ...messages.value]
+      // 如果有 EmptyRange，先插入 EmptyRange，再插入真实消息
+      if (emptyRangeToInsert) {
+        messages.value = [emptyRangeToInsert, ...uniqueNewMessages, ...messages.value]
+      } else {
+        messages.value = [...uniqueNewMessages, ...messages.value]
+      }
 
       // 清除提示信息
       historyLoadMessage.value = ''
@@ -645,15 +713,21 @@ export const useChatStore = defineStore('chat', () => {
           limit: limit,
           hasMore: hasMoreHistory,
           currentOffset: offset,
-          nextOffset: offset + result.length
+          nextOffset: offset + result.length,
+          emptyRangeInserted: !!emptyRangeToInsert
         })
       }
 
       // 注意：不修改 hasMore 状态，因为它是用于分页加载的
       // 历史消息加载的状态由组件层的 hasMoreHistory 管理
 
+      // 返回的 messages 包含 EmptyRange（如果有）
+      const returnMessages = emptyRangeToInsert
+        ? [emptyRangeToInsert, ...result]
+        : result
+
       return {
-        messages: result,
+        messages: returnMessages,
         hasMore: hasMoreHistory,
         timeRange: finalTimeRange,
         offset: offset + result.length  // 返回下一页的 offset
@@ -669,12 +743,7 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  /**
-   * 格式化日期为 YYYY-MM-DD（东八区）
-   */
-  function formatDateYMD(date: Date): string {
-    return formatCSTDate(date)
-  }
+
 
   /**
    * 刷新消息列表
