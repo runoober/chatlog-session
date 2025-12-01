@@ -21,7 +21,7 @@ withDefaults(defineProps<Props>(), {
     <div class="empty-content">
       <!-- 自定义图片 -->
       <div v-if="image" class="empty-image">
-        <img :src="image" :style="{ width: `${imageSize}px`, height: `${imageSize}px` }" alt="empty" />
+        <img :src="image" :style="{ width: `${imageSize}px`, height: `${imageSize}px` }" alt="empty" crossorigin="anonymous" />
       </div>
 
       <!-- 图标 -->

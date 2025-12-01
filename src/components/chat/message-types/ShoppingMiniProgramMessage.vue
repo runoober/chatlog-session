@@ -28,7 +28,7 @@ const handleClick = () => {
         
         <div class="shopping-content">
           <div v-if="thumbUrl" class="product-image">
-            <img :src="thumbUrl" alt="商品图片" />
+            <img :src="thumbUrl" alt="商品图片" loading="lazy" crossorigin="anonymous" />
           </div>
           
           <div class="product-info">

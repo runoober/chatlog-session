@@ -145,7 +145,7 @@ watch(() => props.visible, (visible) => {
         <img
           :src="imageUrl"
           :style="transformStyle"
-          class="viewer-image"
+          class="viewer-image" loading="lazy" crossorigin="anonymous"
           @load="handleImageLoad"
           @error="handleImageError"
         />

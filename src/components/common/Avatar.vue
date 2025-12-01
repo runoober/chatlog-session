@@ -93,7 +93,7 @@ const handleError = () => {
       v-if="src && !imgError"
       :src="src"
       :alt="alt || name"
-      class="avatar__img"
+      class="avatar__img" loading="lazy" crossorigin="anonymous"
       @error="handleError"
     />
     

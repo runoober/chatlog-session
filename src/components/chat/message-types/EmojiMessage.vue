@@ -46,7 +46,7 @@ const handleImageError = () => {
           :src="emojiUrl"
           alt="emoji"
           :class="['emoji-image', { 'emoji-loaded': imageLoaded }]"
-          loading="lazy"
+          loading="lazy" crossorigin="anonymous"
           @load="handleImageLoad"
           @error="handleImageError"
         />
