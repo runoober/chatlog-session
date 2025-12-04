@@ -5,9 +5,11 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { contactAPI } from '@/api'
 import type { Contact } from '@/types/contact'
+import type { ContactFilterType } from '@/types'
 import { useAppStore } from './app'
 import { db } from '@/utils/db'
 import { createBackgroundLoader, type BackgroundLoader, type LoadProgress } from '@/utils/background-loader'
+import { groupAndSortContacts, generateIndexList, filterContacts } from '@/utils/contact-grouping'
 
 export const useContactStore = defineStore('contact', () => {
   const appStore = useAppStore()
@@ -32,7 +34,7 @@ export const useContactStore = defineStore('contact', () => {
   /**
    * 筛选类型
    */
-  const filterType = ref<'all' | 'friend' | 'chatroom' | 'official'>('all')
+  const filterType = ref<ContactFilterType>('all')
 
   /**
    * 搜索关键词
@@ -42,7 +44,7 @@ export const useContactStore = defineStore('contact', () => {
   /**
    * 排序方式
    */
-  const sortBy = ref<'name' | 'time'>('name')
+  const sortBy = ref<'name' | 'pinyin' | 'time'>('pinyin')
 
   /**
    * 是否显示首字母索引
@@ -91,29 +93,17 @@ export const useContactStore = defineStore('contact', () => {
 
     // 按类型筛选
     if (filterType.value !== 'all') {
-      const typeMap = {
-        friend: 'friend',
-        chatroom: 'chatroom',
-        official: 'official',
-      }
-      const targetType = typeMap[filterType.value]
-      result = result.filter(c => c.type === targetType)
+      result = result.filter(c => c.type === filterType.value)
     }
 
     // 搜索筛选
     if (searchKeyword.value) {
-      const keyword = searchKeyword.value.toLowerCase()
-      result = result.filter(c => {
-        const displayName = contactAPI.getDisplayName(c).toLowerCase()
-        const wxid = (c.wxid || '').toLowerCase()
-        const alias = (c.alias || '').toLowerCase()
-        return displayName.includes(keyword) || wxid.includes(keyword) || alias.includes(keyword)
-      })
+      result = filterContacts(result, searchKeyword.value)
     }
 
     // 排序
     result = [...result].sort((a, b) => {
-      if (sortBy.value === 'name') {
+      if (sortBy.value === 'name' || sortBy.value === 'pinyin') {
         const nameA = contactAPI.getDisplayName(a)
         const nameB = contactAPI.getDisplayName(b)
         return nameA.localeCompare(nameB, 'zh-CN')
@@ -156,30 +146,18 @@ export const useContactStore = defineStore('contact', () => {
   /**
    * 按首字母分组的联系人
    */
-  const contactsByLetter = computed(() => {
-    const grouped: Record<string, Contact[]> = {}
-
-    filteredContacts.value.forEach(contact => {
-      const letter = getFirstLetter(contactAPI.getDisplayName(contact))
-      if (!grouped[letter]) {
-        grouped[letter] = []
-      }
-      grouped[letter].push(contact)
-    })
-
-    return grouped
+  /**
+   * 联系人分组
+   */
+  const contactGroups = computed(() => {
+    return groupAndSortContacts(filteredContacts.value)
   })
 
   /**
    * 首字母索引列表
    */
   const letterIndexList = computed(() => {
-    return Object.keys(contactsByLetter.value).sort((a, b) => {
-      // # 排在最后
-      if (a === '#') return 1
-      if (b === '#') return -1
-      return a.localeCompare(b)
-    })
+    return generateIndexList(contactGroups.value)
   })
 
   /**
@@ -226,28 +204,28 @@ export const useContactStore = defineStore('contact', () => {
         if (appStore.isDebug) {
           console.log('📦 从缓存加载联系人', { count: cached.length })
         }
+      }else{
+
+        // 从 API 加载
+        const result = await contactAPI.getContacts(keyword ? { keyword } : undefined)
+        contacts.value = result
+        totalContacts.value = result.length
+
+        // 保存到缓存（仅在无关键词时）
+        if (!keyword && result.length > 0) {
+          await db.saveContacts(result).catch(err => {
+            console.error('保存联系人到缓存失败:', err)
+          })
+        }
       }
-
-      // 从 API 加载
-      const result = await contactAPI.getContacts(keyword ? { keyword } : undefined)
-      contacts.value = result
-      totalContacts.value = result.length
-
-      // 保存到缓存（仅在无关键词时）
-      if (!keyword && result.length > 0) {
-        await db.saveContacts(result).catch(err => {
-          console.error('保存联系人到缓存失败:', err)
-        })
-      }
-
       if (appStore.isDebug) {
         console.log('👥 Contacts loaded', {
-          count: result.length,
+          count: totalContacts.value,
           keyword: keyword || 'all',
         })
       }
 
-      return result
+      return contacts
     } catch (err) {
       // 如果 API 失败，尝试使用缓存
       if (!keyword) {
@@ -488,7 +466,7 @@ export const useContactStore = defineStore('contact', () => {
   /**
    * 设置筛选类型
    */
-  function setFilterType(type: 'all' | 'friend' | 'chatroom' | 'official') {
+  function setFilterType(type: ContactFilterType) {
     filterType.value = type
   }
 
@@ -502,7 +480,7 @@ export const useContactStore = defineStore('contact', () => {
   /**
    * 设置排序方式
    */
-  function setSortBy(sort: 'name' | 'time') {
+  function setSortBy(sort: 'name' | 'pinyin' | 'time') {
     sortBy.value = sort
   }
 
@@ -838,7 +816,7 @@ export const useContactStore = defineStore('contact', () => {
     chatrooms,
     officialAccounts,
     starredContacts,
-    contactsByLetter,
+    contactGroups,
     letterIndexList,
     contactStats,
     hasContacts,

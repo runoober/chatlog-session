@@ -51,3 +51,6 @@ export interface ErrorState {
   contacts: Error | null
   search: Error | null
 }
+
+export type SessionFilterType = 'chat' | 'private' | 'group' | 'official' | 'all'
+export type ContactFilterType = 'friend' | 'chatroom' | 'official' | 'all'

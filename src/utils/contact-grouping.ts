@@ -38,11 +38,11 @@ export interface IndexItem {
  */
 export function ensureContactIndex(contact: Contact): void {
   const name = contact.remark || contact.nickname || ''
-  
+
   if (!contact.pinyinInitial) {
     contact.pinyinInitial = getContactIndexKey(name, contact.isStarred)
   }
-  
+
   if (!contact.sortKey) {
     contact.sortKey = getContactSortKey(name)
   }
@@ -68,18 +68,18 @@ export async function batchEnsureContactIndexesAsync(
   onProgress?: (processed: number, total: number) => void
 ): Promise<void> {
   const total = contacts.length
-  
+
   for (let i = 0; i < total; i += batchSize) {
     const batch = contacts.slice(i, i + batchSize)
-    
+
     // 同步处理当前批次
     batch.forEach(contact => ensureContactIndex(contact))
-    
+
     // 报告进度
     if (onProgress) {
       onProgress(Math.min(i + batchSize, total), total)
     }
-    
+
     // 让出控制权给浏览器，避免阻塞 UI
     if (i + batchSize < total) {
       await new Promise(resolve => setTimeout(resolve, 0))
@@ -121,7 +121,7 @@ export function groupAndSortContacts(contacts: Contact[], skipIndexCalculation: 
           return timeB - timeA // 最新星标在前
         }
       }
-      
+
       // 其他分组按排序键（拼音或字母）
       const nameA = a.remark || a.nickname || ''
       const nameB = b.remark || b.nickname || ''
@@ -209,7 +209,7 @@ export async function groupAndSortContactsAsync(
           return timeB - timeA // 最新星标在前
         }
       }
-      
+
       // 其他分组按排序键（拼音或字母）
       const nameA = a.remark || a.nickname || ''
       const nameB = b.remark || b.nickname || ''
@@ -338,7 +338,7 @@ export function flattenGroups(
  * @param keyword 搜索关键词
  * @returns 匹配的联系人列表
  */
-export function searchContacts(contacts: Contact[], keyword: string): Contact[] {
+export function filterContacts(contacts: Contact[], keyword: string): Contact[] {
   if (!keyword || !keyword.trim()) {
     return contacts
   }
@@ -387,13 +387,13 @@ export function searchContacts(contacts: Contact[], keyword: string): Contact[] 
  */
 export function toggleContactStar(contact: Contact, starred: boolean): void {
   contact.isStarred = starred
-  
+
   if (starred) {
     contact.starredAt = Date.now()
   } else {
     contact.starredAt = undefined
   }
-  
+
   // 重新计算索引（因为星标状态变化会改变索引字母）
   const name = contact.remark || contact.nickname || ''
   contact.pinyinInitial = getContactIndexKey(name, contact.isStarred)
@@ -417,7 +417,7 @@ export function getGroupStats(groups: ContactGroup[]): {
 
   groups.forEach(group => {
     total += group.count
-    
+
     if (group.type === 'starred') {
       starred += group.count
     } else if (group.type === 'letter') {

@@ -6,6 +6,7 @@ import { ref, computed } from 'vue'
 import { sessionAPI } from '@/api'
 import type { Session } from '@/types/session'
 import type { SessionParams } from '@/types/api'
+import type { SessionFilterType } from '@/types'
 import { useAppStore } from './app'
 
 export const useSessionStore = defineStore('session', () => {
@@ -46,7 +47,7 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 筛选类型
    */
-  const filterType = ref < 'all' | 'private' | 'group' | 'official' | 'unknown' >('all')
+  const filterType = ref<SessionFilterType>('all')
 
   /**
    * 搜索关键词
@@ -90,7 +91,13 @@ export const useSessionStore = defineStore('session', () => {
 
     // 按类型筛选
     if (filterType.value !== 'all') {
-      result = result.filter(s => s.type === filterType.value)
+      if (filterType.value === 'chat') {
+        result = result.filter(s => s.type === 'private' || s.type === 'group')
+      } else if (filterType.value === 'starred') {
+        result = result.filter(s => s.isPinned)
+      } else {
+        result = result.filter(s => s.type === filterType.value)
+      }
     }
 
     // 搜索筛选
@@ -310,7 +317,7 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 设置筛选类型
    */
-  function setFilterType(type: 'all' | 'private' | 'group' | 'official' | 'unknown') {
+  function setFilterType(type: SessionFilterType) {
     filterType.value = type
   }
 

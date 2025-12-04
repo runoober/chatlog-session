@@ -13,7 +13,7 @@ import MobileNavBar from '@/components/layout/MobileNavBar.vue'
 import SearchDialog from '@/components/chat/SearchDialog.vue'
 import ContactDetail from '@/views/Contact/ContactDetail.vue'
 import { useDisplayName } from '@/components/chat/composables'
-import type { Session, Message } from '@/types'
+import type { Session, Message, SessionFilterType } from '@/types'
 import { ElMessage } from 'element-plus'
 
 const appStore = useAppStore()
@@ -30,7 +30,7 @@ const messageListComponent = ref()
 const searchText = ref('')
 
 // 筛选类型
-const filterType = ref<'all' | 'private' | 'group' | 'official' | 'unknown' >('all')
+const filterType = ref<SessionFilterType>('chat')
 
 // 当前选中的会话
 const currentSession = computed(() => {
@@ -153,7 +153,7 @@ const sessionDetailDrawerVisible = ref(false)
 // 根据会话类型获取联系人 ID
 const sessionDetailContactId = computed(() => {
   if (!currentSession.value) return ''
-  
+
   // 对于群聊，使用 talker（群 ID）
   // 对于私聊，使用 talker（对方的 wxid）
   // talker 字段包含了实际的联系人 wxid 或群 ID
@@ -163,13 +163,13 @@ const sessionDetailContactId = computed(() => {
 // 会话详情抽屉标题
 const sessionDetailDrawerTitle = computed(() => {
   if (!currentSession.value) return '会话详情'
-  
+
   // 优先使用 displayName，然后使用 remark、name、talkerName
-  const name = mobileDisplayName.value || 
-               currentSession.value.remark || 
-               currentSession.value.name || 
+  const name = mobileDisplayName.value ||
+               currentSession.value.remark ||
+               currentSession.value.name ||
                currentSession.value.talkerName
-  
+
   return name || '会话详情'
 })
 
@@ -179,17 +179,17 @@ const handleShowSessionDetail = () => {
     ElMessage.warning('请先选择一个会话')
     return
   }
-  
+
   // 调试信息
   console.log('🔍 打开会话详情')
   console.log('currentSession:', currentSession.value)
   console.log('sessionDetailContactId:', sessionDetailContactId.value)
   console.log('contactStore.contacts 数量:', contactStore.contacts.length)
-  
+
   // 查找匹配的联系人
   const matchedContact = contactStore.contacts.find(c => c.wxid === sessionDetailContactId.value)
   console.log('找到的联系人:', matchedContact)
-  
+
   sessionDetailDrawerVisible.value = true
 }
 
@@ -207,23 +207,23 @@ const handleRefreshMessages = () => {
 // 自动刷新数据（刷新会话列表 + 消息缓存）
 const autoRefresh = async () => {
   console.log('🔄 执行自动刷新会话列表...')
-  
+
   // 1. 刷新会话列表
   sessionListRef.value?.refresh()
-  
+
   // 2. 等待会话列表更新完成
   await new Promise(resolve => setTimeout(resolve, 500))
-  
+
   // 3. 检测需要刷新消息的会话
   if (autoRefreshStore.config.enabled) {
     console.log('🔄 检测需要刷新消息的会话...')
     try {
       await autoRefreshStore.detectNeedsRefresh()
-      
+
       // 注意：detectNeedsRefresh 内部已经清空并重新填充 needsRefreshTalkers
       // 所以这里的长度就是本次检测的结果
       const needsRefreshCount = autoRefreshStore.needsRefreshTalkers.length
-      
+
       // 显示提示
       if (appStore.isDebug && needsRefreshCount > 0) {
         ElMessage.info({
@@ -552,11 +552,11 @@ onUnmounted(() => {
           <!-- 筛选按钮 -->
           <div class="session-filter">
             <el-radio-group v-model="filterType" size="small">
-              <el-radio-button label="all">全部</el-radio-button>
+              <el-radio-button label="chat">聊天</el-radio-button>
               <el-radio-button label="private">私聊</el-radio-button>
               <el-radio-button label="group">群聊</el-radio-button>
               <el-radio-button label="official">公众号</el-radio-button>
-              <el-radio-button label="unknown">其他</el-radio-button>
+              <el-radio-button label="all">全部</el-radio-button>
             </el-radio-group>
           </div>
         </div>

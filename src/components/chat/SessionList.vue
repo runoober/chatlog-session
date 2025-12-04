@@ -3,12 +3,12 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useSessionStore } from '@/stores/session'
-import type { Session } from '@/types'
+import type { Session, SessionFilterType } from '@/types'
 import SessionItem from './SessionItem.vue'
 
 interface Props {
   searchText?: string
-  filterType?: 'chat' | 'private' | 'group' | 'official' | 'all'
+  filterType?: SessionFilterType
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -43,6 +43,8 @@ const sessionList = computed(() => {
   // 按类型筛选
   if (props.filterType === 'chat') {
     list = list.filter(s => s.type === 'private' || s.type === 'group')
+  } else if (props.filterType === 'starred') {
+    list = list.filter(s => s.isPinned)
   } else if (props.filterType === 'private') {
     list = sessionStore.privateSessions
   } else if (props.filterType === 'group') {
