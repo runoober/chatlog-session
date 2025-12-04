@@ -40,7 +40,7 @@ watch(() => props.searchText, (val) => {
 }, { immediate: true })
 
 // 直接使用 store 的计算属性和状态
-const sessionList = sessionStore.filteredSessions
+const sessionList = ref<Session[]>(sessionStore.filteredSessions)
 
 // 加载会话列表（首次加载，显示 loading）
 const loadSessions = async () => {
