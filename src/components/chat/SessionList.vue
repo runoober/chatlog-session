@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useSessionStore } from '@/stores/session'
@@ -23,88 +23,38 @@ const emit = defineEmits<{
 const router = useRouter()
 const sessionStore = useSessionStore()
 
-// 加载状态
-const loading = ref(false)
-const error = ref<string | null>(null)
-
 // 后台刷新状态（无感知刷新）
 const silentRefreshing = ref(false)
-
-// 排序方式
-const sortType = ref<'time' | 'name' | 'unread'>('time')
 
 // 置顶会话折叠状态
 const isPinnedCollapsed = ref(false)
 
-// 计算会话列表
-const sessionList = computed(() => {
-  let list = sessionStore.sessions
 
-  // 按类型筛选
-  if (props.filterType === 'chat') {
-    list = list.filter(s => s.type === 'private' || s.type === 'group')
-  } else if (props.filterType === 'private') {
-    list = sessionStore.privateSessions
-  } else if (props.filterType === 'group') {
-    list = sessionStore.groupSessions
-  } else if (props.filterType === 'official') {
-    list = sessionStore.officialSessions
-  }
+// 同步 props 到 store
+watch(() => props.filterType, (val) => {
+  sessionStore.setFilterType(val)
+}, { immediate: true })
 
-  // 搜索过滤
-  if (props.searchText) {
-    list = list.filter(session =>
-      (session.name || session.talkerName).toLowerCase().includes(props.searchText.toLowerCase())
-    )
-  }
+watch(() => props.searchText, (val) => {
+  sessionStore.setSearchKeyword(val)
+}, { immediate: true })
 
-  // 排序
-  return list.sort((a, b) => {
-    switch (sortType.value) {
-      case 'time':
-        return new Date(b.lastTime).getTime() - new Date(a.lastTime).getTime()
-      case 'name':
-        return (a.name || a.talkerName).localeCompare(b.name || b.talkerName)
-      case 'unread':
-        return (b.unreadCount || 0) - (a.unreadCount || 0)
-      default:
-        return 0
-    }
-  })
-})
-
-// 置顶会话
-const pinnedSessions = computed(() =>
-  sessionList.value.filter((s: Session) => s.isPinned)
-)
-
-// 普通会话
-const normalSessions = computed(() =>
-  sessionList.value.filter((s: Session) => !s.isPinned)
-)
-
-// 当前选中的会话
-const activeSessionId = computed(() => sessionStore.currentSessionId)
+// 直接使用 store 的计算属性和状态
+const sessionList = sessionStore.filteredSessions
 
 // 加载会话列表（首次加载，显示 loading）
 const loadSessions = async () => {
-  loading.value = true
-  error.value = null
-
   try {
     await sessionStore.loadSessions()
   } catch (err) {
-    error.value = err instanceof Error ? err.message : '加载会话列表失败'
     console.error('加载会话列表失败:', err)
-  } finally {
-    loading.value = false
   }
 }
 
 // 无感知刷新会话列表（后台刷新，不影响 UI）
 const silentRefresh = async () => {
   // 如果正在首次加载或已经在刷新，则跳过
-  if (loading.value || silentRefreshing.value) {
+  if (sessionStore.loading || silentRefreshing.value) {
     return
   }
 
@@ -112,7 +62,7 @@ const silentRefresh = async () => {
 
   try {
     // 保存当前选中的会话 ID
-    const currentId = activeSessionId.value
+    const currentId = sessionStore.currentSessionId
 
     // 后台加载新数据
     await sessionStore.loadSessions()
@@ -123,11 +73,10 @@ const silentRefresh = async () => {
     }
 
     // 清除错误状态（刷新成功）
-    error.value = null
+    sessionStore.clearError()
   } catch (err) {
     // 静默处理错误，不影响用户操作
     console.warn('后台刷新会话列表失败:', err)
-    // 不更新 error 状态，保持界面正常显示
   } finally {
     silentRefreshing.value = false
   }
@@ -177,7 +126,7 @@ const handleSessionAction = async (command: string, session: Session) => {
 // 刷新列表（根据当前状态选择刷新方式）
 const handleRefresh = () => {
   // 如果当前有数据，使用无感知刷新
-  if (sessionList.value.length > 0) {
+  if (sessionStore.hasSessions) {
     silentRefresh()
   } else {
     // 如果没有数据，使用常规加载
@@ -192,17 +141,14 @@ const goToSettings = () => {
 
 // 切换排序
 const handleSortChange = (type: 'time' | 'name' | 'unread') => {
-  sortType.value = type
+  sessionStore.setSortBy(type)
 }
-
-// 监听搜索文本变化
-watch(() => props.searchText, () => {
-  // 可以在这里添加防抖搜索逻辑
-})
 
 // 组件挂载时加载数据
 onMounted(() => {
-  loadSessions()
+  if (!sessionStore.hasSessions) {
+    loadSessions()
+  }
 })
 
 // 暴露方法给父组件
@@ -224,13 +170,13 @@ defineExpose({
         </el-button>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item command="time" :disabled="sortType === 'time'">
+            <el-dropdown-item command="time" :disabled="sessionStore.sortBy === 'time'">
               按时间排序
             </el-dropdown-item>
-            <el-dropdown-item command="name" :disabled="sortType === 'name'">
+            <el-dropdown-item command="name" :disabled="sessionStore.sortBy === 'name'">
               按名称排序
             </el-dropdown-item>
-            <el-dropdown-item command="unread" :disabled="sortType === 'unread'">
+            <el-dropdown-item command="unread" :disabled="sessionStore.sortBy === 'unread'">
               按未读排序
             </el-dropdown-item>
           </el-dropdown-menu>
@@ -243,7 +189,7 @@ defineExpose({
 
       <!-- 后台刷新指示器（非侵入式） -->
       <el-tooltip
-        v-if="silentRefreshing && sessionList.length > 0"
+        v-if="silentRefreshing && sessionStore.hasSessions"
         content="正在刷新..."
         placement="left"
       >
@@ -254,19 +200,19 @@ defineExpose({
     </div>
 
     <!-- 加载状态 -->
-    <div v-if="loading" class="session-list__loading">
+    <div v-if="sessionStore.loading" class="session-list__loading">
       <el-skeleton :rows="6" animated />
     </div>
 
     <!-- 错误状态 -->
-    <div v-else-if="error" class="session-list__error">
+    <div v-else-if="sessionStore.error" class="session-list__error">
       <el-empty description="加载失败">
         <template #image>
           <el-icon size="48" color="var(--el-color-danger)">
             <CircleClose />
           </el-icon>
         </template>
-        <p class="error-message">{{ error }}</p>
+        <p class="error-message">{{ sessionStore.error?.message || '加载会话列表失败' }}</p>
         <div class="error-actions">
           <el-button type="primary" @click="handleRefresh">重试</el-button>
           <el-button @click="goToSettings">
@@ -282,13 +228,13 @@ defineExpose({
 
     <!-- 空状态 -->
     <div v-else-if="sessionList.length === 0" class="session-list__empty">
-      <el-empty :description="searchText ? '未找到匹配的会话' : '暂无会话'">
+      <el-empty :description="sessionStore.searchKeyword ? '未找到匹配的会话' : '暂无会话'">
         <template #image>
           <el-icon size="48" color="var(--el-text-color-secondary)">
             <ChatLineSquare />
           </el-icon>
         </template>
-        <div v-if="!searchText" class="empty-tip">
+        <div v-if="!sessionStore.searchKeyword" class="empty-tip">
           <p>请确保 Chatlog API 服务正在运行</p>
           <p class="text-secondary">默认地址: http://127.0.0.1:5030</p>
         </div>
@@ -298,7 +244,7 @@ defineExpose({
     <!-- 会话列表 -->
     <div v-else class="session-list__content">
       <!-- 置顶会话 -->
-      <div v-if="pinnedSessions.length > 0" class="session-group">
+      <div v-if="sessionStore.pinnedSessions.length > 0" class="session-group">
         <div class="session-group__header clickable" @click="isPinnedCollapsed = !isPinnedCollapsed">
           <div class="header-left">
             <el-icon class="collapse-icon" :class="{ 'is-collapsed': isPinnedCollapsed }">
@@ -306,14 +252,14 @@ defineExpose({
             </el-icon>
             <span>置顶会话</span>
           </div>
-          <el-tag size="small" type="warning">{{ pinnedSessions.length }}</el-tag>
+          <el-tag size="small" type="warning">{{ sessionStore.pinnedSessions.length }}</el-tag>
         </div>
         <div v-show="!isPinnedCollapsed">
           <SessionItem
-            v-for="session in pinnedSessions"
+            v-for="session in sessionStore.pinnedSessions"
             :key="session.id"
             :session="session"
-            :active="session.id === activeSessionId"
+            :active="session.id === sessionStore.currentSessionId"
             @click="handleSelectSession"
             @action="handleSessionAction"
           />
@@ -321,16 +267,16 @@ defineExpose({
       </div>
 
       <!-- 普通会话 -->
-      <div v-if="normalSessions.length > 0" class="session-group">
-        <div v-if="pinnedSessions.length > 0" class="session-group__header">
+      <div v-if="sessionStore.unpinnedSessions.length > 0" class="session-group">
+        <div v-if="sessionStore.pinnedSessions.length > 0" class="session-group__header">
           <span>全部会话</span>
-          <el-tag size="small">{{ normalSessions.length }}</el-tag>
+          <el-tag size="small">{{ sessionStore.unpinnedSessions.length }}</el-tag>
         </div>
         <SessionItem
-          v-for="session in normalSessions"
+          v-for="session in sessionStore.unpinnedSessions"
           :key="session.id"
           :session="session"
-          :active="session.id === activeSessionId"
+          :active="session.id === sessionStore.currentSessionId"
           @click="handleSelectSession"
           @action="handleSessionAction"
         />
@@ -339,7 +285,7 @@ defineExpose({
       <!-- 统计信息 -->
       <div class="session-list__footer">
         <span class="text-secondary">
-          共 {{ sessionList.length }} 个会话
+          共 {{ sessionStore.filteredSessions.length }} 个会话
           <template v-if="sessionStore.totalUnreadCount > 0">
             · {{ sessionStore.totalUnreadCount }} 条未读
           </template>
