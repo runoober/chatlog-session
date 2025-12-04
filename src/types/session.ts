@@ -21,6 +21,7 @@ export interface Session {
   lastMessageType: number
   unreadCount: number
   isPinned: boolean
+  isMinimized: boolean
   isChatRoom: boolean
   messageCount: number
 }

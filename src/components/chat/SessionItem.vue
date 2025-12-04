@@ -84,7 +84,11 @@ const handleCommand = (command: string) => {
   >
     <div
       class="session-item"
-      :class="{ 'session-item--active': active, 'session-item--pinned': session.isPinned }"
+      :class="{
+        'session-item--active': active,
+        'session-item--pinned': session.isPinned,
+        'session-item--minimized': session.isMinimized
+      }"
       @click="handleClick"
     >
       <!-- 头像 -->
@@ -109,6 +113,9 @@ const handleCommand = (command: string) => {
         <div class="session-item__name">
           <el-icon v-if="session.isPinned" size="14" class="pin-icon">
             <Paperclip />
+          </el-icon>
+          <el-icon v-if="session.isMinimized" size="14" class="minimized-icon">
+            <Minus />
           </el-icon>
           <span class="name-text ellipsis">{{ displayName }}</span>
         </div>
@@ -170,6 +177,11 @@ const handleCommand = (command: string) => {
     background-color: var(--el-fill-color-lighter);
   }
 
+  &--minimized {
+    opacity: 0.75;
+    background-color: var(--el-fill-color-extra-light);
+  }
+
   &__avatar {
     position: relative;
     margin-right: 12px;
@@ -205,6 +217,12 @@ const handleCommand = (command: string) => {
 
     .pin-icon {
       color: var(--el-color-warning);
+      margin-right: 4px;
+      flex-shrink: 0;
+    }
+
+    .minimized-icon {
+      color: var(--el-text-color-secondary);
       margin-right: 4px;
       flex-shrink: 0;
     }

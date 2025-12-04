@@ -222,26 +222,27 @@ export const useSessionStore = defineStore('session', () => {
         ...params,
       }
 
-      const result = await sessionAPI.getSessions(queryParams)
+      const { items, total } = await sessionAPI.getSessions(queryParams)
 
       if (append) {
-        sessions.value = [...sessions.value, ...result]
+        sessions.value = [...sessions.value, ...items]
       } else {
-        sessions.value = result
+        sessions.value = items
       }
 
-      totalSessions.value = result.length
-      hasMore.value = result.length >= pageSize.value
+      totalSessions.value = total
+      hasMore.value = items.length >= pageSize.value
 
       if (appStore.isDebug) {
         console.log('📋 Sessions loaded', {
-          count: result.length,
+          count: items.length,
+          total,
           page: currentPage.value,
           hasMore: hasMore.value,
         })
       }
 
-      return result
+      return items
     } catch (err) {
       error.value = err as Error
       appStore.setError(err as Error)

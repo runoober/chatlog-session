@@ -16,6 +16,11 @@ interface SessionApiResponse {
   nickName: string      // 昵称
   content: string       // 最后消息内容
   nTime: string         // 最后消息时间 (ISO 8601格式)
+  avatarUrl?: string    // 头像URL
+  parentRef?: string    // 父引用
+  nUnReadCount?: number // 未读数
+  isPinned?: boolean    // 是否置顶
+  isMinimized?: boolean // 是否最小化
 }
 
 /**
@@ -23,6 +28,15 @@ interface SessionApiResponse {
  */
 interface ApiResponse<T> {
   items: T[]
+  total?: number
+}
+
+/**
+ * 会话列表响应
+ */
+export interface SessionListResponse {
+  items: Session[]
+  total: number
 }
 
 /**
@@ -46,14 +60,12 @@ function transformSession(apiData: SessionApiResponse): Session {
     session_type = 'unknown'
   }
 
-
-
   return {
     id: apiData.userName,
     talker: apiData.userName,
     talkerName: apiData.nickName || apiData.userName,
     name: getSessionName(apiData, session_type),
-    avatar: '', // 后端未返回头像，暂时为空
+    avatar: apiData.avatarUrl || '',
     remark: '',
     type: session_type,
     lastMessage: (apiData.content || apiData.nickName) ? {
@@ -64,8 +76,9 @@ function transformSession(apiData: SessionApiResponse): Session {
     } : undefined,
     lastTime: apiData.nTime,
     lastMessageType: 1,
-    unreadCount: 0, // 后端未返回未读数
-    isPinned: false, // 后端未返回置顶状态
+    unreadCount: apiData.nUnReadCount || 0,
+    isPinned: apiData.isPinned || false,
+    isMinimized: apiData.isMinimized || false,
     isChatRoom: isChatRoom,
     messageCount: 0, // 后端未返回消息总数
   }
@@ -105,22 +118,25 @@ class SessionAPI {
    * GET /api/v1/session
    *
    * @param params 查询参数
-   * @returns 会话列表
+   * @returns 会话列表和总数
    */
-  async getSessions(params?: SessionParams): Promise<Session[]> {
+  async getSessions(params?: SessionParams): Promise<SessionListResponse> {
     const response = await request.get<ApiResponse<SessionApiResponse>>('/api/v1/session', params)
+
+    let items: Session[] = []
+    let total = 0
 
     // 转换数据格式
     if (response && response.items && Array.isArray(response.items)) {
-      return response.items.map(item => transformSession(item))
+      items = response.items.map(item => transformSession(item))
+      total = response.total || items.length
+    } else if (Array.isArray(response)) {
+      // 兼容旧格式（如果直接返回数组）
+      items = (response as any[]).map(item => transformSession(item))
+      total = items.length
     }
 
-    // 兼容旧格式（如果直接返回数组）
-    if (Array.isArray(response)) {
-      return (response as any[]).map(item => transformSession(item))
-    }
-
-    return []
+    return { items, total }
   }
 
   /**
@@ -142,8 +158,9 @@ class SessionAPI {
    * @param offset 偏移量
    * @returns 会话列表
    */
-  getAllSessions(limit = 50, offset = 0): Promise<Session[]> {
-    return this.getSessions({ limit, offset })
+  async getAllSessions(limit = 50, offset = 0): Promise<Session[]> {
+    const { items } = await this.getSessions({ limit, offset })
+    return items
   }
 
   /**
@@ -153,8 +170,9 @@ class SessionAPI {
    * @param limit 返回数量
    * @returns 会话列表
    */
-  getSessionsByType(type: 'private' | 'group' | 'official' | 'unknown', limit = 50): Promise<Session[]> {
-    return this.getSessions({ type, limit })
+  async getSessionsByType(type: 'private' | 'group' | 'official' | 'unknown', limit = 50): Promise<Session[]> {
+    const { items } = await this.getSessions({ type, limit })
+    return items
   }
 
   /**
@@ -183,8 +201,8 @@ class SessionAPI {
    * @returns 置顶会话列表
    */
   async getPinnedSessions(): Promise<Session[]> {
-    const sessions = await this.getSessions()
-    return sessions.filter(session => session.isPinned)
+    const { items } = await this.getSessions({ limit: 100 })
+    return items.filter(session => session.isPinned)
   }
 
   /**
@@ -195,8 +213,8 @@ class SessionAPI {
    * @returns 活跃会话列表
    */
   async getActiveSessions(limit = 20): Promise<Session[]> {
-    const sessions = await this.getSessions({ limit })
-    return sessions.sort((a, b) => {
+    const { items } = await this.getSessions({ limit })
+    return items.sort((a, b) => {
       const timeA = a.lastMessage?.createTime || 0
       const timeB = b.lastMessage?.createTime || 0
       return timeB - timeA
@@ -210,10 +228,10 @@ class SessionAPI {
    * @returns 搜索结果
    */
   async searchSessions(keyword: string): Promise<Session[]> {
-    const sessions = await this.getSessions()
+    const { items } = await this.getSessions({ limit: 1000 })
     const lowerKeyword = keyword.toLowerCase()
 
-    return sessions.filter(session => {
+    return items.filter(session => {
       const name = (session.name || '').toLowerCase()
       const remark = (session.remark || '').toLowerCase()
       return name.includes(lowerKeyword) || remark.includes(lowerKeyword)
@@ -226,8 +244,8 @@ class SessionAPI {
    * @returns 有未读消息的会话列表
    */
   async getUnreadSessions(): Promise<Session[]> {
-    const sessions = await this.getSessions()
-    return sessions.filter(session => (session.unreadCount || 0) > 0)
+    const { items } = await this.getSessions({ limit: 100 })
+    return items.filter(session => (session.unreadCount || 0) > 0)
   }
 
   /**
@@ -242,14 +260,14 @@ class SessionAPI {
     unread: number
     pinned: number
   }> {
-    const sessions = await this.getSessions()
+    const { items, total } = await this.getSessions({ limit: 1000 })
 
     return {
-      total: sessions.length,
-      private: sessions.filter(s => s.type === 'private').length,
-      group: sessions.filter(s => s.type === 'group').length,
-      unread: sessions.filter(s => (s.unreadCount || 0) > 0).length,
-      pinned: sessions.filter(s => s.isPinned).length,
+      total: total,
+      private: items.filter(s => s.type === 'private').length,
+      group: items.filter(s => s.type === 'group').length,
+      unread: items.filter(s => (s.unreadCount || 0) > 0).length,
+      pinned: items.filter(s => s.isPinned).length,
     }
   }
 
