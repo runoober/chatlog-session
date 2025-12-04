@@ -11,14 +11,15 @@ const props = defineProps<Props>()
 const URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`[\]]+/g
 
 // 解析文本内容
-const parseContent = (text: string): Array<{ type: 'text' | 'link'; value: string }> => {
+const parseContent = (text: string): Array<{ type: 'text' | 'link'; value: string; key: number }> => {
   if (!text) return []
 
-  const parts: Array<{ type: 'text' | 'link'; value: string }> = []
+  const parts: Array<{ type: 'text' | 'link'; value: string; key: number }> = []
   const matches = [...text.matchAll(URL_REGEX)]
+  let key = 0
 
   if (matches.length === 0) {
-    return [{ type: 'text', value: text }]
+    return [{ type: 'text', value: text, key: key++ }]
   }
 
   let lastIndex = 0
@@ -27,17 +28,17 @@ const parseContent = (text: string): Array<{ type: 'text' | 'link'; value: strin
 
     // 添加链接前的文本
     if (matchIndex > lastIndex) {
-      parts.push({ type: 'text', value: text.slice(lastIndex, matchIndex) })
+      parts.push({ type: 'text', value: text.slice(lastIndex, matchIndex), key: key++ })
     }
 
     // 添加链接
-    parts.push({ type: 'link', value: match[0] })
+    parts.push({ type: 'link', value: match[0], key: key++ })
     lastIndex = matchIndex + match[0].length
   }
 
   // 添加剩余的文本
   if (lastIndex < text.length) {
-    parts.push({ type: 'text', value: text.slice(lastIndex) })
+    parts.push({ type: 'text', value: text.slice(lastIndex), key: key++ })
   }
 
   return parts
@@ -60,7 +61,7 @@ const openLink = (url: string) => {
 <template>
   <div class="message-text">
     <template v-if="hasLinks">
-      <template v-for="(part, index) in parsedContent" :key="index">
+      <template v-for="part in parsedContent" :key="part.key">
         <span v-if="part.type === 'text'">{{ part.value }}</span>
         <a
           v-else
