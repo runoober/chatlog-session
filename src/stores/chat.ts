@@ -193,7 +193,7 @@ export const useChatStore = defineStore('chat', () => {
       const dateObj = typeof timestamp === 'string'
         ? new Date(timestamp)
         : new Date(timestamp < 10000000000 ? timestamp * 1000 : timestamp)
-      
+
       if (isNaN(dateObj.getTime())) {
         if (appStore.isDebug) {
           console.warn('⚠️ Invalid date format:', { timestamp, message })
@@ -270,18 +270,18 @@ export const useChatStore = defineStore('chat', () => {
    * 加载消息列表
    * 优先从缓存加载，如果没有缓存则从 API 加载并缓存
    */
-  async function loadMessages(talker: string, page = 1, append = false, beforeTime?: string) {
+  async function loadMessages(talker: string, page = 1, append = false, timeRange?: string) {
     //如果 beforeTime 不包含 ~ , 则说明不是时间范围， 则需要补充成一个时间范围
-    if (beforeTime && !beforeTime.includes('~')) {
+    if (timeRange && !timeRange.includes('~')) {
       // 获取beforeTime 当天的 0 点
-      const beforeDate = typeof beforeTime === 'string'
-        ? new Date(beforeTime)
-        : new Date(beforeTime * 1000)
+      const beforeDate = typeof timeRange === 'string'
+        ? new Date(timeRange)
+        : new Date(timeRange * 1000)
       const startOfDay = (new Date(beforeDate.getFullYear(), beforeDate.getMonth(), beforeDate.getDate()))
       // 获取beforeTime 当天的 23:59:59
-      const endOfDay = beforeTime
+      const endOfDay = timeRange
 
-      beforeTime = formatCSTRange(startOfDay, new Date(endOfDay))
+      timeRange = formatCSTRange(startOfDay, new Date(endOfDay))
     }
     try {
       loading.value = true
@@ -291,7 +291,7 @@ export const useChatStore = defineStore('chat', () => {
       let result: Message[] = []
       const limit = pageSize.value
 
-      // 第一页且没有时间过滤时，尝试从缓存加载
+      // 第一页且没有时间过滤时，优先尝试从缓存加载
       if (page === 1 && !append) {
         const cached = cacheStore.get(talker)
         if (cached) {
@@ -304,7 +304,8 @@ export const useChatStore = defineStore('chat', () => {
           if (refreshStore.config.enabled) {
             // 获取缓存中最新消息的时间（东八区 ISO 格式）
             const startFromTime = getLatestMessageTime(cached)
-            if(!beforeTime || !startFromTime || beforeTime > startFromTime){
+              //if(!timeRange || !startFromTime || timeRange > startFromTime)
+            {
 
               if (appStore.isDebug) {
                 console.log('⏳ Triggering background refresh for talker:', talker)
@@ -324,7 +325,7 @@ export const useChatStore = defineStore('chat', () => {
         const offset = (page - 1) * limit
 
         // 直接使用传入的时间字符串参数
-        result = await chatlogAPI.getSessionMessages(talker, beforeTime, limit, offset)
+        result = await chatlogAPI.getSessionMessages(talker, timeRange, limit, offset)
 
         // 第一页时保存到缓存
         if (page === 1 && !append) {
@@ -348,13 +349,13 @@ export const useChatStore = defineStore('chat', () => {
       }
 
       // 插入 EmptyRange 消息
-      if ( beforeTime && page === 1 && !append) {
-        const suggestedBeforeTime = parseTimeRangeStart(beforeTime)
+      if ( timeRange && page === 1 && !append) {
+        const suggestedBeforeTime = parseTimeRangeStart(timeRange)
         const newestMsgTime = getFirstMessageTime(result)
 
         const emptyRangeMessage = createEmptyRangeMessage(
           talker,
-          beforeTime,
+          timeRange,
           newestMsgTime,
           0, // triedTimes
           suggestedBeforeTime
@@ -363,7 +364,7 @@ export const useChatStore = defineStore('chat', () => {
         if (appStore.isDebug) {
           console.log('📝 EmptyRange message created for empty load:', {
             talker,
-            timeRange: beforeTime,
+            timeRange: timeRange,
             suggestedBeforeTime: new Date(suggestedBeforeTime).toISOString()
           })
         }
