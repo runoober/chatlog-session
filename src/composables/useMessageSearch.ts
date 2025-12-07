@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useSessionStore } from '@/stores/session'
 import { ElMessage } from 'element-plus'
 import type { Session, Message } from '@/types'
@@ -84,10 +84,10 @@ export function useMessageSearch(
   return {
     // 状态
     searchDialogVisible,
-    
+
     // 计算属性
     canSearchMessages,
-    
+
     // 方法
     handleSearchMessages,
     handleSearchMessageClick,
