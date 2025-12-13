@@ -28,12 +28,7 @@ const hasMoreHistory = ref(true)
 const error = ref<string | null>(null)
 const historyLoadMessage = ref('')
 
-// 历史消息加载的上下文（用于同一时间范围内的分页）
-const historyLoadContext = ref<{
-  timeRange: string
-  offset: number
-  beforeTime: string | number
-} | null>(null)
+
 
 // 当前消息列表
 const messages = computed(() => {
@@ -132,7 +127,7 @@ const handleLoadHistory = async () => {
     console.log('🔍 Loading history before:', beforeTime)
 
     // 调用 store 的历史消息加载方法（只请求一次）
-    const result = await chatStore.loadHistoryMessages(props.sessionId, beforeTime, 0, undefined)
+    const result = await chatStore.loadHistoryMessages(props.sessionId, beforeTime)
 
     // 更新历史加载提示消息
     historyLoadMessage.value = chatStore.historyLoadMessage
@@ -334,7 +329,6 @@ watch(() => props.sessionId, (newId, oldId) => {
     }
     hasMoreHistory.value = true
     historyLoadMessage.value = ''
-    historyLoadContext.value = null
     loadMessages(false)
   }
 }, { immediate: true })

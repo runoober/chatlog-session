@@ -19,7 +19,9 @@ import {
   deduplicateMessages,
   detectTimeGap,
   loadMessagesInTimeRange,
-  handleEmptyResult
+  handleEmptyResult,
+  checkDataConnection,
+  estimateMessageCount
 } from './chat/utils'
 
 export const useChatStore = defineStore('chat', () => {
@@ -414,9 +416,7 @@ export const useChatStore = defineStore('chat', () => {
 
   async function loadHistoryMessages(
     talker: string,
-    beforeTime: string | number,
-    offset: number = 0,
-    existingTimeRange?: string
+    beforeTime: string | number
    ): Promise<{ messages: Message[], hasMore: boolean, timeRange: string, offset: number }> {
     if (loadingHistory.value) {
       console.warn('History loading already in progress')
@@ -434,31 +434,15 @@ export const useChatStore = defineStore('chat', () => {
       let finalTimeRange = ''
       let retryCount = 0
 
-      // 如果传入了 existingTimeRange（分页加载），直接使用该时间范围
-      if (existingTimeRange && offset > 0) {
-        finalTimeRange = existingTimeRange
-
-        if (appStore.isDebug) {
-          console.log('📄 Continue loading in existing time range:', {
-            timeRange: existingTimeRange,
-            offset,
-            limit
-          })
-        }
-
-        // 直接调用 API
-        result = await loadMessagesInTimeRange(talker, existingTimeRange, limit, offset)
-      } else {
-        // 首次加载：使用智能策略获取消息
-        const smartResult = await fetchSmartHistoryMessages(messages.value, talker, beforeTime, limit, offset, appStore.isDebug)
-        result = smartResult.result
-        finalTimeRange = smartResult.finalTimeRange
-        retryCount = smartResult.retryCount
-      }
+      // 使用智能策略获取消息
+      const smartResult = await fetchSmartHistoryMessages(messages.value, talker, beforeTime, limit, 0, appStore.isDebug)
+      result = smartResult.result
+      finalTimeRange = smartResult.finalTimeRange
+      retryCount = smartResult.retryCount
 
       // 如果返回空结果
       if (result.length === 0) {
-        const emptyResult = handleEmptyResult(messages.value, talker, finalTimeRange, offset, retryCount, appStore.isDebug)
+        const emptyResult = handleEmptyResult(messages.value, talker, finalTimeRange, 0, retryCount, appStore.isDebug)
         if (emptyResult.newMessages && emptyResult.newMessages.length > 0) {
           messages.value = emptyResult.messages
         }
@@ -466,7 +450,7 @@ export const useChatStore = defineStore('chat', () => {
           messages: emptyResult.newMessages,
           hasMore: emptyResult.hasMore,
           timeRange: emptyResult.timeRange,
-          offset: emptyResult.offset
+          offset: 0
         }
       }
 
@@ -474,9 +458,7 @@ export const useChatStore = defineStore('chat', () => {
       if (appStore.isDebug) {
         console.log('✅ History messages loaded:', {
           count: result.length,
-          timeRange: finalTimeRange,
-          offset,
-          nextOffset: offset + result.length
+          timeRange: finalTimeRange
         })
       }
 
@@ -494,59 +476,38 @@ export const useChatStore = defineStore('chat', () => {
       
       if (hasMoreHistory && uniqueNewMessages.length > 0) {
         // 检查新数据是否与已有数据衔接
-        // 找到第一条非虚拟消息作为已有数据的最早消息
-        const existingFirstRealMsg = messages.value.find(msg => !msg.isGap && !msg.isEmptyRange)
-        
-        let isConnected = false
-        if (existingFirstRealMsg) {
-          // 使用原始 result 而不是 uniqueNewMessages，因为后者已经去重
-          const newestLoadedMsg = result[result.length - 1]
-          
-          // 比较 seq、time、sender 来判断是否是同一条消息或相邻消息
-          if (newestLoadedMsg.seq === existingFirstRealMsg.seq && 
-              newestLoadedMsg.time === existingFirstRealMsg.time) {
-            // 最新加载的消息和已有最早消息是同一条，说明已衔接
-            isConnected = true
-          } else {
-            // 检查时间是否紧密相连（时间差小于等于 1 秒）
-            const newestLoadedTime = newestLoadedMsg.time 
-              ? new Date(newestLoadedMsg.time).getTime() 
-              : newestLoadedMsg.createTime * 1000
-            const existingFirstTime = existingFirstRealMsg.time 
-              ? new Date(existingFirstRealMsg.time).getTime() 
-              : existingFirstRealMsg.createTime * 1000
-            
-            const timeDiff = Math.abs(existingFirstTime - newestLoadedTime)
-            if (timeDiff <= 1000) {
-              // 时间差小于等于 1 秒，认为是衔接的
-              isConnected = true
-            }
-          }
-        }
+        const isConnected = checkDataConnection(result, messages.value)
         
         if (!isConnected) {
-          // 如果未衔接，才插入 Gap
-          // 历史消息加载使用 bottom=1，从时间范围末尾开始返回
-          // Gap 标记：从最新加载消息的时间到请求的结束时间
+          // 如果未衔接，才插入 Gap（标记更新的未加载数据）
           const requestedEndTime = parseTimeRangeEnd(finalTimeRange)
           const newestLoadedMsg = uniqueNewMessages[uniqueNewMessages.length - 1]
           const newestLoadedTime = newestLoadedMsg.time 
             ? new Date(newestLoadedMsg.time).getTime() 
             : newestLoadedMsg.createTime * 1000
           
+          // 根据消息密度估算 Gap 范围内的消息数量
+          const estimatedCount = estimateMessageCount(
+            messages.value,
+            talker,
+            newestLoadedTime,
+            requestedEndTime
+          )
+          
           // Gap 标记更新的未加载部分
           gapToInsert = createGapMessage(
             talker, 
             newestLoadedTime,
             requestedEndTime,
-            result.length
+            estimatedCount
           )
           
           if (appStore.isDebug) {
             console.log('📌 Creating Gap message at bottom for newer data:', {
               newestLoaded: new Date(newestLoadedTime).toISOString(),
               requestedEnd: new Date(requestedEndTime).toISOString(),
-              estimatedCount: result.length
+              estimatedCount,
+              actualLoaded: result.length
             })
           }
         } else {
@@ -556,7 +517,7 @@ export const useChatStore = defineStore('chat', () => {
         }
       } else {
         // 如果未满载，检测时间间隙，插入 EmptyRange
-        emptyRangeToInsert = detectTimeGap(talker, finalTimeRange, offset, uniqueNewMessages, appStore.isDebug)
+        emptyRangeToInsert = detectTimeGap(talker, finalTimeRange, 0, uniqueNewMessages, appStore.isDebug)
       }
 
       // 插入消息到列表
@@ -577,28 +538,18 @@ export const useChatStore = defineStore('chat', () => {
       if (appStore.isDebug) {
         console.log('📊 History loading result:', {
           loaded: result.length,
-          limit: limit,
+          unique: uniqueNewMessages.length,
           hasMore: hasMoreHistory,
           gapInserted: !!gapToInsert,
           emptyRangeInserted: !!emptyRangeToInsert
         })
       }
 
-      // 准备返回结果
-      const returnMessages: Message[] = []
-      if (emptyRangeToInsert) {
-        returnMessages.push(emptyRangeToInsert)
-      }
-      returnMessages.push(...result)
-      if (gapToInsert) {
-        returnMessages.push(gapToInsert)
-      }
-
       return {
-        messages: returnMessages,
+        messages: uniqueNewMessages,
         hasMore: hasMoreHistory,
         timeRange: finalTimeRange,
-        offset: offset + result.length
+        offset: 0
       }
     } catch (err) {
       error.value = err as Error
@@ -665,31 +616,7 @@ export const useChatStore = defineStore('chat', () => {
       let newGapToInsert: Message | null = null
       if (hasMoreInGap && uniqueNewMessages.length > 0) {
         // 检查新数据是否与已有数据衔接
-        const existingFirstRealMsg = messages.value.find(msg => !msg.isGap && !msg.isEmptyRange)
-        
-        let isConnected = false
-        if (existingFirstRealMsg) {
-          // 使用原始 result 而不是 uniqueNewMessages
-          const newestLoadedMsg = result[result.length - 1]
-          
-          // 比较判断是否衔接
-          if (newestLoadedMsg.seq === existingFirstRealMsg.seq && 
-              newestLoadedMsg.time === existingFirstRealMsg.time) {
-            isConnected = true
-          } else {
-            const newestLoadedTime = newestLoadedMsg.time 
-              ? new Date(newestLoadedMsg.time).getTime() 
-              : newestLoadedMsg.createTime * 1000
-            const existingFirstTime = existingFirstRealMsg.time 
-              ? new Date(existingFirstRealMsg.time).getTime() 
-              : existingFirstRealMsg.createTime * 1000
-            
-            const timeDiff = Math.abs(existingFirstTime - newestLoadedTime)
-            if (timeDiff <= 1000) {
-              isConnected = true
-            }
-          }
-        }
+        const isConnected = checkDataConnection(result, messages.value)
         
         if (!isConnected) {
           const requestedEndTime = parseTimeRangeEnd(timeRange)
@@ -698,19 +625,28 @@ export const useChatStore = defineStore('chat', () => {
             ? new Date(newestLoadedMsg.time).getTime() 
             : newestLoadedMsg.createTime * 1000
           
+          // 根据消息密度估算剩余消息数量
+          const estimatedCount = estimateMessageCount(
+            messages.value,
+            gapMessage.talker,
+            newestLoadedTime,
+            requestedEndTime
+          )
+          
           // 创建新的 Gap 标记剩余未加载部分（底部）
           newGapToInsert = createGapMessage(
             gapMessage.talker, 
             newestLoadedTime,
             requestedEndTime,
-            result.length
+            estimatedCount
           )
           
           if (appStore.isDebug) {
             console.log('📌 Creating new Gap at bottom for remaining data:', {
               newestLoaded: new Date(newestLoadedTime).toISOString(),
               requestedEnd: new Date(requestedEndTime).toISOString(),
-              estimatedCount: result.length
+              estimatedCount,
+              actualLoaded: result.length
             })
           }
         } else {

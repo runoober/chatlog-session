@@ -105,6 +105,66 @@ export function deduplicateMessages(messages: Message[], newMessages: Message[],
 }
 
 /**
+ * 根据消息密度估算时间范围内的消息数量
+ * @param messages 已有消息列表
+ * @param talker 会话 ID
+ * @param startTime 起始时间（毫秒时间戳）
+ * @param endTime 结束时间（毫秒时间戳）
+ * @returns 预估的消息数量
+ */
+export function estimateMessageCount(
+  messages: Message[],
+  talker: string,
+  startTime: number,
+  endTime: number
+): number {
+  const density = calculateMessageDensity(messages, talker)
+  
+  if (density <= 0) {
+    return 0
+  }
+  
+  const timeSpanDays = (endTime - startTime) / (1000 * 60 * 60 * 24)
+  const estimatedCount = Math.round(density * timeSpanDays)
+  
+  return Math.max(0, estimatedCount)
+}
+
+/**
+ * 检查新加载的数据是否与已有数据衔接
+ * @param newMessages 新加载的消息（原始数据，未去重）
+ * @param existingMessages 已有的消息列表
+ * @returns 是否衔接
+ */
+export function checkDataConnection(newMessages: Message[], existingMessages: Message[]): boolean {
+  if (newMessages.length === 0) return false
+  
+  // 找到第一条非虚拟消息作为已有数据的最早消息
+  const existingFirstRealMsg = existingMessages.find(msg => !msg.isGap && !msg.isEmptyRange)
+  if (!existingFirstRealMsg) return false
+  
+  // 使用原始数据的最后一条消息
+  const newestLoadedMsg = newMessages[newMessages.length - 1]
+  
+  // 方式1：比较 seq 和 time 判断是否是同一条消息
+  if (newestLoadedMsg.seq === existingFirstRealMsg.seq && 
+      newestLoadedMsg.time === existingFirstRealMsg.time) {
+    return true
+  }
+  
+  // 方式2：检查时间是否紧密相连（时间差小于等于 1 秒）
+  const newestLoadedTime = newestLoadedMsg.time 
+    ? new Date(newestLoadedMsg.time).getTime() 
+    : newestLoadedMsg.createTime * 1000
+  const existingFirstTime = existingFirstRealMsg.time 
+    ? new Date(existingFirstRealMsg.time).getTime() 
+    : existingFirstRealMsg.createTime * 1000
+  
+  const timeDiff = Math.abs(existingFirstTime - newestLoadedTime)
+  return timeDiff <= 1000
+}
+
+/**
  * 检测时间间隙
  */
 export function detectTimeGap(
