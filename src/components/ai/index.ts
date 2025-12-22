@@ -23,6 +23,10 @@ export { default as ReferenceSelector } from './ReferenceSelector.vue'
 export { default as ReferenceFilter } from './ReferenceFilter.vue'
 export { default as ContextPreview } from './ContextPreview.vue'
 
-// TODO: 待实现的组件
-// export { default as AIConversationPanel } from './AIConversationPanel.vue'
-// export { default as MessageBubble } from './AIMessageBubble.vue'
+// AI 对话界面组件
+export { default as AIConversationPanel } from './AIConversationPanel.vue'
+export { default as AIMessageBubble } from './AIMessageBubble.vue'
+export { default as ConversationList } from './ConversationList.vue'
+export { default as StreamingIndicator } from './StreamingIndicator.vue'
+export { default as ContextTags } from './ContextTags.vue'
+export { default as MessageActions } from './MessageActions.vue'
