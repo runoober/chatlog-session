@@ -13,47 +13,21 @@ const llmStore = useLLMConfigStore()
 // 测试连接状态
 const testing = ref(false)
 
-// 配置表单
-const form = computed({
-  get: () => ({
-    provider: llmStore.provider,
-    apiKey: llmStore.apiKey,
-    baseUrl: llmStore.baseUrl,
-    model: llmStore.model,
-    temperature: llmStore.temperature,
-    maxTokens: llmStore.maxTokens,
-    topP: llmStore.topP,
-    enableDataFilter: llmStore.enableDataFilter,
-    showTokenUsage: llmStore.showTokenUsage,
-    useCache: llmStore.useCache
-  }),
-  set: (value) => {
-    llmStore.provider = value.provider
-    llmStore.apiKey = value.apiKey
-    llmStore.baseUrl = value.baseUrl
-    llmStore.model = value.model
-    llmStore.temperature = value.temperature
-    llmStore.maxTokens = value.maxTokens
-    llmStore.topP = value.topP
-    llmStore.enableDataFilter = value.enableDataFilter
-    llmStore.showTokenUsage = value.showTokenUsage
-    llmStore.useCache = value.useCache
-  }
-})
-
 // 显示 API Key（默认隐藏）
 const showApiKey = ref(false)
 
 // 当 provider 改变时，自动设置默认 baseUrl
-watch(() => form.value.provider, (newProvider) => {
+watch(() => llmStore.provider, (newProvider, oldProvider) => {
   const defaults = {
     openai: 'https://api.openai.com',
     claude: 'https://api.anthropic.com',
     ollama: 'http://localhost:11434',
     custom: ''
   }
-  if (!form.value.baseUrl || form.value.baseUrl === defaults[llmStore.provider]) {
-    form.value.baseUrl = defaults[newProvider] || ''
+  // 只在从默认值切换时自动更新
+  const oldDefault = defaults[oldProvider] || ''
+  if (!llmStore.baseUrl || llmStore.baseUrl === oldDefault) {
+    llmStore.baseUrl = defaults[newProvider] || ''
   }
 })
 
@@ -188,16 +162,16 @@ const connectionStatusType = computed(() => {
 
       <!-- 提供商选择 -->
       <el-form-item label="AI 提供商">
-        <ProviderSelector v-model="form.provider" />
+        <ProviderSelector v-model="llmStore.provider" />
       </el-form-item>
 
       <!-- API Key -->
       <el-form-item 
-        v-if="form.provider !== 'ollama'"
+        v-if="llmStore.provider !== 'ollama'"
         label="API Key"
       >
         <el-input
-          v-model="form.apiKey"
+          v-model="llmStore.apiKey"
           :type="showApiKey ? 'text' : 'password'"
           placeholder="请输入 API Key"
           clearable
@@ -214,11 +188,11 @@ const connectionStatusType = computed(() => {
       <!-- Base URL -->
       <el-form-item label="API 地址">
         <el-input
-          v-model="form.baseUrl"
+          v-model="llmStore.baseUrl"
           placeholder="API Base URL"
           clearable
         >
-          <template v-if="form.provider === 'ollama'" #append>
+          <template v-if="llmStore.provider === 'ollama'" #append>
           <el-button 
             :icon="'Refresh'"
             :loading="refreshingModels"
@@ -232,7 +206,7 @@ const connectionStatusType = computed(() => {
 
       <!-- 模型选择 -->
       <el-form-item label="模型">
-        <ModelSelector v-model="form.model" :provider="form.provider" />
+        <ModelSelector v-model="llmStore.model" :provider="llmStore.provider" />
       </el-form-item>
 
       <!-- 连接状态 -->
@@ -266,7 +240,7 @@ const connectionStatusType = computed(() => {
       <!-- Temperature -->
       <el-form-item label="Temperature">
         <el-slider
-          v-model="form.temperature"
+          v-model="llmStore.temperature"
           :min="0"
           :max="2"
           :step="0.1"
@@ -281,7 +255,7 @@ const connectionStatusType = computed(() => {
       <!-- Max Tokens -->
       <el-form-item label="最大 Token 数">
         <el-input-number
-          v-model="form.maxTokens"
+          v-model="llmStore.maxTokens"
           :min="1"
           :max="128000"
           :step="100"
@@ -294,7 +268,7 @@ const connectionStatusType = computed(() => {
       <!-- Top P -->
       <el-form-item label="Top P">
         <el-slider
-          v-model="form.topP"
+          v-model="llmStore.topP"
           :min="0"
           :max="1"
           :step="0.05"
@@ -314,19 +288,19 @@ const connectionStatusType = computed(() => {
       <h3 class="section-title">隐私与安全</h3>
 
       <el-form-item>
-        <el-checkbox v-model="form.enableDataFilter">
+        <el-checkbox v-model="llmStore.enableDataFilter">
           启用数据过滤（自动过滤敏感信息）
         </el-checkbox>
       </el-form-item>
 
       <el-form-item>
-        <el-checkbox v-model="form.showTokenUsage">
+        <el-checkbox v-model="llmStore.showTokenUsage">
           显示 Token 使用统计
         </el-checkbox>
       </el-form-item>
 
       <el-form-item>
-        <el-checkbox v-model="form.useCache">
+        <el-checkbox v-model="llmStore.useCache">
           启用响应缓存（节省成本）
         </el-checkbox>
       </el-form-item>
@@ -335,7 +309,7 @@ const connectionStatusType = computed(() => {
     <el-divider />
 
     <!-- 使用统计 -->
-    <div v-if="form.showTokenUsage" class="config-section">
+    <div v-if="llmStore.showTokenUsage" class="config-section">
       <h3 class="section-title">使用统计</h3>
       <UsageStats />
     </div>

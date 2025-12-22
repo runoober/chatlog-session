@@ -11,6 +11,7 @@ import type {
   ConfigPreset 
 } from '@/types/ai'
 import { aiDB } from '@/utils/ai-db'
+import { createMCPClient } from '@/api/ai/mcp-client'
 
 export const useLLMConfigStore = defineStore('llm-config', () => {
   // ==================== State ====================
@@ -258,17 +259,30 @@ export const useLLMConfigStore = defineStore('llm-config', () => {
     lastError.value = null
     
     try {
-      // TODO: 实现实际的 API 连接测试
-      // 这里暂时模拟测试
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      // 创建 MCP 客户端
+      const client = createMCPClient({
+        provider: provider.value,
+        apiKey: apiKey.value,
+        baseUrl: baseUrl.value,
+        timeout: 10000 // 10 秒超时
+      })
       
-      // 模拟成功
-      connectionStatus.value = 'connected'
-      lastTestTime.value = new Date()
-      return true
-    } catch (error: any) {
+      // 执行连接测试
+      const result = await client.testConnection()
+      
+      if (result) {
+        connectionStatus.value = 'connected'
+        lastTestTime.value = new Date()
+        lastError.value = null
+        return true
+      } else {
+        connectionStatus.value = 'disconnected'
+        lastError.value = '连接失败，请检查配置'
+        return false
+      }
+    } catch (error) {
       connectionStatus.value = 'disconnected'
-      lastError.value = error.message
+      lastError.value = error instanceof Error ? error.message : '连接测试失败'
       return false
     }
   }
@@ -284,11 +298,18 @@ export const useLLMConfigStore = defineStore('llm-config', () => {
       const response = await fetch(`${url}/api/tags`)
       const data = await response.json()
       
-      availableModels.value.ollama = data.models.map((m: any) => ({
+      interface OllamaModel {
+        name: string
+        context_length?: number
+        size?: number
+        modified_at?: string
+      }
+      
+      availableModels.value.ollama = (data.models as OllamaModel[]).map((m) => ({
         id: m.name,
         name: m.name,
         contextLength: m.context_length || 4096,
-        size: m.size,
+        size: m.size ? `${(m.size / 1024 / 1024 / 1024).toFixed(2)} GB` : undefined,
         modified: m.modified_at,
         pricing: { input: 0, output: 0 }
       }))
