@@ -194,8 +194,12 @@ export const usePromptStore = defineStore('prompt', () => {
    */
   async function recordUsage(id: number): Promise<void> {
     try {
-      // 更新使用次数
-      await aiDB.incrementPromptUsage(id)
+      // 获取提示词并更新使用次数
+      const prompt = await aiDB.getPrompt(id)
+      if (prompt) {
+        prompt.usageCount = (prompt.usageCount || 0) + 1
+        await aiDB.savePrompt(prompt)
+      }
       
       // 更新最近使用列表
       recentIds.value = recentIds.value.filter(rid => rid !== id)

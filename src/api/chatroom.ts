@@ -182,9 +182,9 @@ class ChatroomAPI {
     const result = new Map<string, Chatroom>()
 
     // 先从 IndexedDB 中读取
-    const needFetch: string[] = []
+    let needFetch: string[] = []
     if (useCache) {
-      const cachedMap = await db.getChatrooms(chatroomIds)
+      const cachedMap = await db.getBatchChatrooms(chatroomIds)
       cachedMap.forEach((chatroom, id) => {
         result.set(id, chatroom)
       })
@@ -196,7 +196,7 @@ class ChatroomAPI {
         }
       })
     } else {
-      needFetch.push(...chatroomIds)
+      needFetch = [...chatroomIds]
     }
 
     // 如果全部命中缓存，直接返回

@@ -178,7 +178,7 @@ export const useAIConversationStore = defineStore('ai-conversation', () => {
    */
   async function loadMessages(conversationId: number): Promise<void> {
     try {
-      const messages = await aiDB.getConversationMessages(conversationId)
+      const messages = await aiDB.getMessagesByConversation(conversationId)
       currentMessages.value = messages
       console.log(`✅ 加载了 ${messages.length} 条消息`)
     } catch (err: any) {
