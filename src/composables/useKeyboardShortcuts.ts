@@ -2,7 +2,7 @@
  * 全局键盘快捷键
  */
 import { onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useAppStore } from '@/stores/app'
 
 /**
  * 快捷键配置
@@ -20,7 +20,7 @@ export interface ShortcutConfig {
  * 使用键盘快捷键
  */
 export function useKeyboardShortcuts() {
-  const router = useRouter()
+  const appStore = useAppStore()
   const shortcuts = new Map<string, ShortcutConfig>()
   const showHelp = ref(false)
 
@@ -114,7 +114,7 @@ export function useKeyboardShortcuts() {
       ctrlOrCmd: true,
       description: '打开 AI 助手',
       callback: () => {
-        router.push('/ai')
+        appStore.setActiveNav('ai')
       }
     })
 
@@ -124,7 +124,7 @@ export function useKeyboardShortcuts() {
       ctrlOrCmd: true,
       description: '打开搜索',
       callback: () => {
-        router.push('/search')
+        appStore.setActiveNav('search')
       }
     })
 
@@ -134,7 +134,7 @@ export function useKeyboardShortcuts() {
       ctrlOrCmd: true,
       description: '打开设置',
       callback: () => {
-        router.push('/settings')
+        appStore.setActiveNav('settings')
       }
     })
 
@@ -143,8 +143,8 @@ export function useKeyboardShortcuts() {
       key: 'Escape',
       description: '返回',
       callback: () => {
-        if (window.innerWidth <= 768) {
-          router.back()
+        if (appStore.isMobile && appStore.canNavigateBack()) {
+          appStore.navigateBack()
         }
       }
     })

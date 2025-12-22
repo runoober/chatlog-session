@@ -9,6 +9,7 @@ import SettingsView from './Settings/index.vue'
 import MobileTabBar from '@/components/layout/MobileTabBar.vue'
 
 const DashboardView = defineAsyncComponent(() => import('./Dashboard/index.vue'))
+const AIView = defineAsyncComponent(() => import('./AI/index.vue'))
 
 const appStore = useAppStore()
 const contactStore = useContactStore()
@@ -17,7 +18,7 @@ const contactStore = useContactStore()
 const isContactLoading = computed(() => contactStore.isBackgroundLoading)
 
 // 当前激活的视图
-type ViewType = 'chat' | 'contact' | 'search' | 'dashboard' | 'settings'
+type ViewType = 'chat' | 'contact' | 'ai' | 'search' | 'dashboard' | 'settings'
 const currentView = ref<ViewType>('chat')
 
 // 同步 activeNav 和 currentView
@@ -74,6 +75,8 @@ const CurrentViewComponent = computed(() => {
       return ChatView
     case 'contact':
       return ContactView
+    case 'ai':
+      return AIView
     case 'search':
       return SearchView
     case 'dashboard':
@@ -126,6 +129,18 @@ const CurrentViewComponent = computed(() => {
                 </el-icon>
               </div>
             </transition>
+          </div>
+        </el-tooltip>
+
+        <el-tooltip content="AI 助手" placement="right">
+          <div
+            class="nav-item"
+            :class="{ active: isActive('ai') }"
+            @click="switchView('ai')"
+          >
+            <el-icon size="24">
+              <ChatDotRound />
+            </el-icon>
           </div>
         </el-tooltip>
 

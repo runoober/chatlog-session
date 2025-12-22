@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Close,
@@ -15,6 +14,7 @@ import {
 } from '@element-plus/icons-vue'
 import { useBatchSelectionStore } from '@/stores/batchSelection'
 import { useReferenceStore } from '@/stores/ai/reference'
+import { useAppStore } from '@/stores/app'
 import type { Message } from '@/types'
 
 interface Props {
@@ -31,7 +31,7 @@ const emit = defineEmits<{
   'export': []
 }>()
 
-const router = useRouter()
+const appStore = useAppStore()
 const batchStore = useBatchSelectionStore()
 const referenceStore = useReferenceStore()
 
@@ -99,9 +99,9 @@ const handleSendToAI = () => {
     // 退出批量选择
     batchStore.deactivate()
     
-    // 跳转到 AI 助手
+    // 切换到 AI 助手视图
     setTimeout(() => {
-      router.push('/ai')
+      appStore.setActiveNav('ai')
     }, 300)
   } catch (error) {
     console.error('添加引用失败:', error)

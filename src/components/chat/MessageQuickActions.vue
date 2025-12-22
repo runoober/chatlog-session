@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { 
   CopyDocument, 
@@ -11,6 +10,7 @@ import {
 } from '@element-plus/icons-vue'
 import type { Message } from '@/types'
 import { useReferenceStore } from '@/stores/ai/reference'
+import { useAppStore } from '@/stores/app'
 
 interface Props {
   message: Message
@@ -26,7 +26,7 @@ const emit = defineEmits<{
   'favorite': [message: Message]
 }>()
 
-const router = useRouter()
+const appStore = useAppStore()
 const referenceStore = useReferenceStore()
 
 // 下拉菜单显示状态
@@ -72,9 +72,9 @@ const handleSendToAI = () => {
     
     ElMessage.success('已添加到 AI 引用')
     
-    // 跳转到 AI 助手页面
+    // 切换到 AI 助手视图
     setTimeout(() => {
-      router.push('/ai')
+      appStore.setActiveNav('ai')
     }, 300)
   } catch (error) {
     console.error('添加引用失败:', error)

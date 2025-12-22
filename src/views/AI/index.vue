@@ -1,14 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, Setting } from '@element-plus/icons-vue'
 import AIConversationPanel from '@/components/ai/AIConversationPanel.vue'
 import { useAIConversationStore } from '@/stores/ai/conversation'
 import { useLLMConfigStore } from '@/stores/ai/llm-config'
 import { useAppStore } from '@/stores/app'
 
-const router = useRouter()
 const conversationStore = useAIConversationStore()
 const llmConfigStore = useLLMConfigStore()
 const appStore = useAppStore()
@@ -27,11 +24,7 @@ const isLLMConfigured = computed(() => {
 onMounted(async () => {
   // 检查 LLM 配置
   if (!isLLMConfigured.value) {
-    ElMessage.warning('请先配置 AI 模型')
-    // 3 秒后跳转到设置页面
-    setTimeout(() => {
-      router.push('/settings')
-    }, 3000)
+    ElMessage.warning('请先在设置中配置 AI 模型')
     return
   }
 
@@ -64,57 +57,22 @@ const handleSelectConversation = (id: number) => {
   currentConversationId.value = id
 }
 
-// 返回
-const handleBack = () => {
-  if (appStore.isMobile) {
-    router.back()
-  }
-}
-
-// 打开设置
-const handleOpenSettings = () => {
-  router.push('/settings')
-}
-
 // 响应式判断
 const isMobile = computed(() => appStore.isMobile)
 </script>
 
 <template>
   <div class="ai-assistant-page">
-    <!-- 移动端头部 -->
-    <div v-if="isMobile" class="mobile-header">
-      <el-button
-        text
-        circle
-        @click="handleBack"
-      >
-        <el-icon :size="20">
-          <ArrowLeft />
-        </el-icon>
-      </el-button>
-
-      <h3 class="title">AI 助手</h3>
-
-      <el-button
-        text
-        circle
-        @click="handleOpenSettings"
-      >
-        <el-icon :size="20">
-          <Setting />
-        </el-icon>
-      </el-button>
-    </div>
-
     <!-- 主内容区 -->
     <div class="ai-assistant-content">
       <!-- 未配置提示 -->
       <div v-if="!isLLMConfigured" class="config-prompt">
-        <el-empty description="请先配置 AI 模型">
-          <el-button type="primary" @click="handleOpenSettings">
-            前往设置
-          </el-button>
+        <el-empty description="请先在设置中配置 AI 模型">
+          <template #extra>
+            <p style="color: var(--el-text-color-secondary); font-size: 14px; margin-top: 8px;">
+              在左侧导航栏点击"设置"，然后配置 AI 模型
+            </p>
+          </template>
         </el-empty>
       </div>
 
@@ -201,31 +159,9 @@ const isMobile = computed(() => appStore.isMobile)
 .ai-assistant-page {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   width: 100%;
   background: var(--el-bg-color);
-}
-
-// 移动端头部
-.mobile-header {
-  display: none;
-
-  @media (max-width: 768px) {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    height: 56px;
-    padding: 0 8px;
-    background: var(--el-bg-color);
-    border-bottom: 1px solid var(--el-border-color-light);
-    z-index: 100;
-
-    .title {
-      font-size: 16px;
-      font-weight: 600;
-      margin: 0;
-    }
-  }
 }
 
 // 主内容区
@@ -356,10 +292,6 @@ const isMobile = computed(() => appStore.isMobile)
 
 // 暗色模式
 .dark {
-  .mobile-header {
-    background: var(--el-bg-color);
-  }
-
   .conversation-sidebar {
     background: var(--el-bg-color);
   }
