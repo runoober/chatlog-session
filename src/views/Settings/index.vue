@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useNotificationStore } from '@/stores/notification'
+import { useLLMConfigStore } from '@/stores/ai/llm-config'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getVersion, getBuildDate, getVersionInfo } from '@/utils/version'
@@ -10,6 +11,7 @@ import { LLMConfigPanel } from '@/components/ai'
 
 const appStore = useAppStore()
 const notificationStore = useNotificationStore()
+const llmConfigStore = useLLMConfigStore()
 const router = useRouter()
 
 // 设置选项
@@ -259,6 +261,8 @@ onMounted(async () => {
   loadSettings()
   // 初始化通知 Store
   await notificationStore.init()
+  // 初始化 LLM Config Store
+  await llmConfigStore.init()
   // 从 notificationStore 加载设置
   settings.value.myWxid = notificationStore.config.myWxid || ''
   settings.value.showMessageContent = notificationStore.config.showMessageContent

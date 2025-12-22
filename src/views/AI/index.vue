@@ -22,6 +22,9 @@ const isLLMConfigured = computed(() => {
 
 // 初始化
 onMounted(async () => {
+  // 初始化 LLM 配置
+  await llmConfigStore.init()
+  
   // 检查 LLM 配置
   if (!isLLMConfigured.value) {
     ElMessage.warning('请先在设置中配置 AI 模型')
