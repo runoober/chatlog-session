@@ -57,14 +57,14 @@ const handleClearCache = async () => {
       <el-form-item label="保存历史">
         <el-switch
           :model-value="modelValue.saveHistory"
-          @update:model-value="(val) => updateValue('saveHistory', val)"
+          @update:model-value="(val) => updateValue('saveHistory', val as boolean)"
         />
       </el-form-item>
 
       <el-form-item label="自动下载">
         <el-switch
           :model-value="modelValue.autoDownloadMedia"
-          @update:model-value="(val) => updateValue('autoDownloadMedia', val)"
+          @update:model-value="(val) => updateValue('autoDownloadMedia', val as boolean)"
         />
         <span class="form-tip">自动下载图片和视频</span>
       </el-form-item>
@@ -72,7 +72,7 @@ const handleClearCache = async () => {
       <el-form-item label="压缩图片">
         <el-switch
           :model-value="modelValue.compressImages"
-          @update:model-value="(val) => updateValue('compressImages', val)"
+          @update:model-value="(val) => updateValue('compressImages', val as boolean)"
         />
       </el-form-item>
 

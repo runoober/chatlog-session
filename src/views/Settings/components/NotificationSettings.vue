@@ -175,7 +175,7 @@ const clearNotificationHistory = async () => {
       <el-form-item label="启用通知">
         <el-switch
           :model-value="modelValue.enableNotifications"
-          @update:model-value="(val) => updateValue('enableNotifications', val)"
+          @update:model-value="(val) => updateValue('enableNotifications', val as boolean)"
         />
         <span class="form-tip">关闭后将不会收到任何通知</span>
       </el-form-item>
@@ -202,7 +202,7 @@ const clearNotificationHistory = async () => {
         <el-switch
           :model-value="modelValue.showMessageContent"
           :disabled="!modelValue.enableNotifications"
-          @update:model-value="(val) => updateValue('showMessageContent', val)"
+          @update:model-value="(val) => updateValue('showMessageContent', val as boolean)"
         />
         <span class="form-tip">关闭后通知只显示"有新消息"，不显示具体内容（隐私保护）</span>
       </el-form-item>
@@ -218,7 +218,7 @@ const clearNotificationHistory = async () => {
         <el-switch
           :model-value="modelValue.enableMention"
           :disabled="!modelValue.enableNotifications"
-          @update:model-value="(val) => updateValue('enableMention', val)"
+          @update:model-value="(val) => updateValue('enableMention', val as boolean)"
         />
         <span class="form-tip">有人在群聊中 @你</span>
       </el-form-item>
@@ -227,7 +227,7 @@ const clearNotificationHistory = async () => {
         <el-switch
           :model-value="modelValue.enableQuote"
           :disabled="!modelValue.enableNotifications"
-          @update:model-value="(val) => updateValue('enableQuote', val)"
+          @update:model-value="(val) => updateValue('enableQuote', val as boolean)"
         />
         <span class="form-tip">有人引用了你的消息</span>
       </el-form-item>
@@ -236,7 +236,7 @@ const clearNotificationHistory = async () => {
         <el-switch
           :model-value="modelValue.enableMessage"
           :disabled="!modelValue.enableNotifications"
-          @update:model-value="(val) => updateValue('enableMessage', val)"
+          @update:model-value="(val) => updateValue('enableMessage', val as boolean)"
         />
         <span class="form-tip">所有新消息（可能会很多）</span>
       </el-form-item>
@@ -252,7 +252,7 @@ const clearNotificationHistory = async () => {
         <el-switch
           :model-value="modelValue.enableSound"
           :disabled="!modelValue.enableNotifications"
-          @update:model-value="(val) => updateValue('enableSound', val)"
+          @update:model-value="(val) => updateValue('enableSound', val as boolean)"
         />
       </el-form-item>
 
@@ -260,7 +260,7 @@ const clearNotificationHistory = async () => {
         <el-switch
           :model-value="modelValue.enableVibrate"
           :disabled="!modelValue.enableNotifications"
-          @update:model-value="(val) => updateValue('enableVibrate', val)"
+          @update:model-value="(val) => updateValue('enableVibrate', val as boolean)"
         />
         <span class="form-tip">仅移动设备支持</span>
       </el-form-item>
@@ -269,7 +269,7 @@ const clearNotificationHistory = async () => {
         <el-switch
           :model-value="modelValue.onlyShowLatest"
           :disabled="!modelValue.enableNotifications"
-          @update:model-value="(val) => updateValue('onlyShowLatest', val)"
+          @update:model-value="(val) => updateValue('onlyShowLatest', val as boolean)"
         />
         <span class="form-tip">新通知会替换旧通知</span>
       </el-form-item>

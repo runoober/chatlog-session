@@ -200,7 +200,7 @@ const resetApiSettings = () => {
       <el-form-item label="调试模式">
         <el-switch
           :model-value="modelValue.enableDebug"
-          @update:model-value="(val: boolean) => updateValue('enableDebug', val)"
+          @update:model-value="(val) => updateValue('enableDebug', val as boolean)"
         />
         <el-text type="info" size="small" style="margin-left: 12px">
           在控制台输出 API 请求详情和调试信息

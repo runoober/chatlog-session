@@ -31,7 +31,7 @@ const updateValue = <K extends keyof AdvancedSettingsData>(key: K, value: Advanc
       <el-form-item label="调试模式">
         <el-switch
           :model-value="modelValue.enableDebug"
-          @update:model-value="(val) => updateValue('enableDebug', val)"
+          @update:model-value="(val) => updateValue('enableDebug', val as boolean)"
         />
         <span class="form-tip">在控制台输出 API 请求详情和调试信息</span>
       </el-form-item>
