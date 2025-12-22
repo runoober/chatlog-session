@@ -271,7 +271,7 @@ const groupOverview = computed(() => {
           </el-card>
 
           <!-- 群聊分析 -->
-          <el-card shadow="hover" class="overview-card  chart-card" v-if="groupOverview">
+          <el-card v-if="groupOverview" shadow="hover" class="overview-card  chart-card">
             <template #header>
               <div class="card-header">
                 <span>群聊分析</span>
