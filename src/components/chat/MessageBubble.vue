@@ -297,7 +297,7 @@ const forwardedTitle = computed(() => messageUrls.forwardedTitle.value || 'èŠå¤
 .message-bubble {
   display: flex;
   gap: 12px;
-  padding: 8px 0;
+  padding: 8px 16px;
   position: relative;
 
   &--self {
