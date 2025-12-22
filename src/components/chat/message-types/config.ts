@@ -18,6 +18,8 @@ export interface MessageTypeConfig {
   component: string
   
   // Props 映射配置
+  // message: 消息对象
+  // context: 上下文对象，包含 showMediaResources、referMessage、referMessageType 和所有 URL 字段的值（非 ComputedRef）
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   propsMapper?: (message: any, context: any) => Record<string, any>
   

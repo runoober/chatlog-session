@@ -104,23 +104,73 @@ const bubbleClass = computed(() => {
 // 动态组件
 const dynamicComponent = computed(() => {
   if (!componentName.value) return null
-  return MESSAGE_COMPONENT_REGISTRY[componentName.value]
+  const component = MESSAGE_COMPONENT_REGISTRY[componentName.value]
+  
+  if (!component) {
+    console.error(`[MessageBubble] 组件 "${componentName.value}" 未在注册表中找到`)
+    return null
+  }
+  
+  return component
 })
 
 // 组件 Props（通过配置映射）
 const componentProps = computed(() => {
   const config = messageConfig.value
-  if (!config || !config.propsMapper) return {}
-  
-  // 创建上下文对象
-  const context = {
-    showMediaResources: showMediaResources.value,
-    referMessage: referMessage.value,
-    referMessageType: referMessageType.value,
-    ...messageUrls
+  if (!config || !config.propsMapper) {
+    console.warn('[MessageBubble] 配置或 propsMapper 不存在', {
+      type: props.message.type,
+      subType: props.message.subType,
+      config
+    })
+    return {}
   }
   
-  return config.propsMapper(props.message, context)
+  try {
+    // 创建上下文对象
+    const context = {
+      showMediaResources: showMediaResources.value,
+      referMessage: referMessage.value,
+      referMessageType: referMessageType.value,
+      // 手动解构所有 ComputedRef 的值
+      imageThumbUrl: messageUrls.imageThumbUrl.value,
+      imageUrl: messageUrls.imageUrl.value,
+      videoUrl: messageUrls.videoUrl.value,
+      voiceUrl: messageUrls.voiceUrl.value,
+      emojiUrl: messageUrls.emojiUrl.value,
+      fileUrl: messageUrls.fileUrl.value,
+      fileName: messageUrls.fileName.value,
+      linkTitle: messageUrls.linkTitle.value,
+      linkUrl: messageUrls.linkUrl.value,
+      forwardedTitle: messageUrls.forwardedTitle.value,
+      forwardedDesc: messageUrls.forwardedDesc.value,
+      forwardedCount: messageUrls.forwardedCount.value,
+      miniProgramTitle: messageUrls.miniProgramTitle.value,
+      miniProgramUrl: messageUrls.miniProgramUrl.value,
+      shoppingMiniProgramTitle: messageUrls.shoppingMiniProgramTitle.value,
+      shoppingMiniProgramUrl: messageUrls.shoppingMiniProgramUrl.value,
+      shoppingMiniProgramDesc: messageUrls.shoppingMiniProgramDesc.value,
+      shoppingMiniProgramThumb: messageUrls.shoppingMiniProgramThumb.value,
+      shortVideoTitle: messageUrls.shortVideoTitle.value,
+      shortVideoUrl: messageUrls.shortVideoUrl.value,
+      liveTitle: messageUrls.liveTitle.value,
+      locationLabel: messageUrls.locationLabel.value,
+      locationX: messageUrls.locationX.value,
+      locationY: messageUrls.locationY.value,
+      locationCityname: messageUrls.locationCityname.value
+    }
+    
+    const mappedProps = config.propsMapper(props.message, context)
+    
+    return mappedProps
+  } catch (error) {
+    console.error('[MessageBubble] propsMapper 执行错误', {
+      error,
+      message: props.message,
+      config
+    })
+    return {}
+  }
 })
 
 // 转发消息对话框
@@ -196,17 +246,27 @@ const forwardedTitle = computed(() => messageUrls.forwardedTitle.value || '聊�
 
         <!-- 消息主体 - 使用动态组件 -->
         <div class="message-bubble__body">
-          <component
-            :is="dynamicComponent"
-            v-if="dynamicComponent"
-            v-bind="componentProps"
-            @click="isForwardedMessage ? handleForwardedClick() : undefined"
-          />
+          <!-- 动态组件渲染 -->
+          <template v-if="dynamicComponent">
+            <component
+              :is="dynamicComponent"
+              v-bind="componentProps"
+              @click="isForwardedMessage ? handleForwardedClick() : undefined"
+            />
+          </template>
           
           <!-- 未知消息类型 -->
           <div v-else class="message-unknown">
             <el-icon><Warning /></el-icon>
-            <span>未知消息类型 (type={{ message.type }}, subType={{ message.subType }})</span>
+            <div class="unknown-info">
+              <div>未知消息类型</div>
+              <div class="unknown-detail">
+                type={{ message.type }}, subType={{ message.subType }}
+              </div>
+              <div v-if="componentName" class="unknown-detail">
+                组件: {{ componentName }}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -361,7 +421,7 @@ const forwardedTitle = computed(() => messageUrls.forwardedTitle.value || '聊�
 
 .message-unknown {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   padding: 8px 12px;
   color: var(--el-color-warning);
@@ -371,6 +431,18 @@ const forwardedTitle = computed(() => messageUrls.forwardedTitle.value || '聊�
 
   .el-icon {
     font-size: 16px;
+    margin-top: 2px;
+    flex-shrink: 0;
+  }
+
+  .unknown-info {
+    flex: 1;
+
+    .unknown-detail {
+      font-size: 11px;
+      opacity: 0.8;
+      margin-top: 4px;
+    }
   }
 }
 
