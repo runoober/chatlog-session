@@ -6,6 +6,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getVersion, getBuildDate, getVersionInfo } from '@/utils/version'
 import { Guide } from '@element-plus/icons-vue'
+import { LLMConfigPanel } from '@/components/ai'
 
 const appStore = useAppStore()
 const notificationStore = useNotificationStore()
@@ -68,6 +69,7 @@ const activeMenu = ref('api')
 // 菜单项
 const menuItems = [
   { key: 'api', label: 'API 设定', icon: 'Link' },
+  { key: 'ai', label: 'AI 助手', icon: 'ChatLineRound' },
   { key: 'appearance', label: '外观设置', icon: 'Brush' },
   { key: 'notifications', label: '通知设置', icon: 'Bell' },
   { key: 'chat', label: '聊天设置', icon: 'ChatDotRound' },
@@ -637,6 +639,16 @@ const restartOnboarding = async () => {
                 </div>
               </template>
             </el-alert>
+          </div>
+
+          <!-- AI 助手 -->
+          <div v-show="activeMenu === 'ai'" class="setting-section">
+            <div class="section-header">
+              <h3>AI 助手</h3>
+              <p>配置 AI 大模型和 MCP 集成</p>
+            </div>
+
+            <LLMConfigPanel />
           </div>
 
           <!-- 外观设置 -->
