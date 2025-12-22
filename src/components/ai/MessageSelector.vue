@@ -65,8 +65,8 @@
           />
           <el-button
             type="primary"
-            @click="handleAddManualMessages"
             style="margin-top: 8px"
+            @click="handleAddManualMessages"
           >
             添加消息
           </el-button>

@@ -130,7 +130,7 @@ const handleResetStats = async () => {
             <span class="stat-value">{{ formatCost(llmStore.usageStats.totalCost) }}</span>
             <span class="stat-label">总成本</span>
           </div>
-          <div class="stat-info" v-if="llmStore.usageStats.monthlyBudget">
+          <div v-if="llmStore.usageStats.monthlyBudget" class="stat-info">
             <div class="budget-info">
               <span class="budget-label">月预算</span>
               <span class="budget-value">{{ formatCost(llmStore.usageStats.monthlyBudget) }}</span>

@@ -6,8 +6,8 @@
         v-model="searchQuery"
         placeholder="搜索提示词..."
         clearable
-        @input="handleSearch"
         class="search-input"
+        @input="handleSearch"
       >
         <template #prefix>
           <el-icon><Search /></el-icon>
@@ -18,8 +18,8 @@
         v-model="selectedCategory"
         placeholder="分类筛选"
         clearable
-        @change="handleCategoryChange"
         style="width: 150px"
+        @change="handleCategoryChange"
       >
         <el-option label="全部" value="" />
         <el-option label="📝 总结类" value="summary" />
@@ -40,8 +40,8 @@
       <el-tag
         :type="showFavorites ? 'primary' : 'info'"
         :effect="showFavorites ? 'dark' : 'plain'"
-        @click="showFavorites = !showFavorites"
         class="filter-tag"
+        @click="showFavorites = !showFavorites"
       >
         <el-icon><StarFilled v-if="showFavorites" /><Star v-else /></el-icon>
         收藏
@@ -49,8 +49,8 @@
       <el-tag
         :type="showBuiltIn ? 'primary' : 'info'"
         :effect="showBuiltIn ? 'dark' : 'plain'"
-        @click="showBuiltIn = !showBuiltIn"
         class="filter-tag"
+        @click="showBuiltIn = !showBuiltIn"
       >
         <el-icon><Box /></el-icon>
         内置
@@ -58,8 +58,8 @@
       <el-tag
         :type="showRecent ? 'primary' : 'info'"
         :effect="showRecent ? 'dark' : 'plain'"
-        @click="showRecent = !showRecent"
         class="filter-tag"
+        @click="showRecent = !showRecent"
       >
         <el-icon><Clock /></el-icon>
         最近使用
@@ -109,8 +109,8 @@
                     </el-dropdown-item>
                     <el-dropdown-item
                       v-if="!prompt.isBuiltIn"
-                      @click="handleDeletePrompt(prompt)"
                       divided
+                      @click="handleDeletePrompt(prompt)"
                     >
                       <el-icon><Delete /></el-icon>
                       删除
