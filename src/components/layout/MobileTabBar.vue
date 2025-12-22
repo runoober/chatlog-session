@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useSessionStore } from '@/stores/session'
 import { useContactStore } from '@/stores/contact'
 
+const router = useRouter()
 const appStore = useAppStore()
 const sessionStore = useSessionStore()
 const contactStore = useContactStore()
@@ -30,6 +32,12 @@ const tabs: TabItem[] = [
     badge: () => contactStore.isBackgroundLoading ? '...' : null
   },
   {
+    key: 'ai',
+    label: 'AI',
+    icon: 'ChatDotRound',
+    badge: null
+  },
+  {
     key: 'search',
     label: '搜索',
     icon: 'Search',
@@ -45,7 +53,8 @@ const tabs: TabItem[] = [
 
 // 处理标签点击
 const handleTabClick = (key: string) => {
-  appStore.switchMobileView(key)
+  appStore.setActiveNav(key)
+  router.push(`/${key}`)
 }
 
 // 判断是否激活
