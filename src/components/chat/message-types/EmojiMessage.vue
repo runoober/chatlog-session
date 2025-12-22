@@ -46,7 +46,7 @@ const handleImageError = () => {
           :src="emojiUrl"
           alt="emoji"
           :class="['emoji-image', { 'emoji-loaded': imageLoaded }]"
-          loading="lazy" crossorigin="anonymous"
+          loading="lazy"
           @load="handleImageLoad"
           @error="handleImageError"
         />
@@ -66,7 +66,7 @@ const handleImageError = () => {
     </template>
     <span v-else class="media-placeholder">{{ getMediaPlaceholder(47) }}</span>
   </div>
-  
+
   <!-- 表情预览 -->
   <ImageViewer
     v-model:visible="showPreview"

@@ -25,18 +25,18 @@ const handleClick = () => {
           <el-icon class="shopping-icon"><ShoppingCart /></el-icon>
           <span class="shopping-label">购物小程序</span>
         </div>
-        
+
         <div class="shopping-content">
           <div v-if="thumbUrl" class="product-image">
-            <img :src="thumbUrl" alt="商品图片" loading="lazy" crossorigin="anonymous" />
+            <img :src="thumbUrl" alt="商品图片" loading="lazy"/>
           </div>
-          
+
           <div class="product-info">
             <div class="product-title">{{ title }}</div>
             <div v-if="desc" class="product-desc">{{ desc }}</div>
           </div>
         </div>
-        
+
         <div class="shopping-footer">
           <span class="shopping-hint">查看商品</span>
           <el-icon class="arrow-icon"><Right /></el-icon>

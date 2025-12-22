@@ -45,7 +45,7 @@ const handleImageError = () => {
           v-if="!imageError"
           :src="thumbUrl"
           :class="['image-content', { 'image-loaded': imageLoaded }]"
-          loading="lazy" crossorigin="anonymous"
+          loading="lazy"
           @load="handleImageLoad"
           @error="handleImageError"
         />
