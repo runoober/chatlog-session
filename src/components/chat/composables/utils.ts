@@ -23,6 +23,7 @@ export function getMediaPlaceholder(type: number, subType?: number, fileName?: s
     if (subType === 3) return '[QQ音乐]'
     if (subType === 5) return '[链接]'
     if (subType === 6) return fileName ? `[文件] ${fileName}` : '[文件]'
+    if (subType === 8) return '[表情包(未下载)]'
     if (subType === 16) return '[微信卡包]'
     if (subType === 19) return '[聊天记录]'
     if (subType === 2000) return '[转账]'

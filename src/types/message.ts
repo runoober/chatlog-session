@@ -28,6 +28,7 @@ export enum RichMessageSubType {
   VideoLink = 4,
   Link = 5,
   File = 6,
+  EmojiNotDownloaded = 8,
   CardPackage = 16,
   Forwarded = 19,
   MiniProgram = 33,
@@ -301,7 +302,7 @@ export function parseTimeRangeEnd(timeRange: string): number {
 /**
  * 创建 Gap 消息
  * Gap 消息标记指定时间范围内有数据需要加载
- * 
+ *
  * @param talker 会话 ID
  * @param gapStartTime Gap 起始时间（时间戳或 ISO 字符串）
  * @param gapEndTime Gap 结束时间（时间戳或 ISO 字符串）
@@ -314,11 +315,11 @@ export function createGapMessage(
   gapEndTime: string | number,
   estimatedCount?: number
 ): Message {
-  const startDate = typeof gapStartTime === 'string' 
-    ? new Date(gapStartTime) 
+  const startDate = typeof gapStartTime === 'string'
+    ? new Date(gapStartTime)
     : new Date(gapStartTime)
-  const endDate = typeof gapEndTime === 'string' 
-    ? new Date(gapEndTime) 
+  const endDate = typeof gapEndTime === 'string'
+    ? new Date(gapEndTime)
     : new Date(gapEndTime)
 
   const startStr = formatCSTTime(startDate)

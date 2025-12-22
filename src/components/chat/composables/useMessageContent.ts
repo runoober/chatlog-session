@@ -25,6 +25,9 @@ export function useMessageContent(message: Message) {
   const isVideoLinkMessage = computed(
     () => message.type === MessageType.File && message.subType === RichMessageSubType.VideoLink
   )
+  const isEmojiNotDownloadedMessage = computed(
+    () => message.type === MessageType.File && message.subType === RichMessageSubType.EmojiNotDownloaded
+  )
   const isCardPackageMessage = computed(
     () => message.type === MessageType.File && message.subType === RichMessageSubType.CardPackage
   )
@@ -84,7 +87,8 @@ export function useMessageContent(message: Message) {
       !isLiveMessage.value &&
       !isJielongMessage.value &&
       !isTransferMessage.value &&
-      !isRedPacketMessage.value
+      !isRedPacketMessage.value &&
+      !isEmojiNotDownloadedMessage.value
   )
 
   // 引用消息内容
@@ -132,6 +136,7 @@ export function useMessageContent(message: Message) {
     isJielongMessage,
     isTransferMessage,
     isRedPacketMessage,
+    isEmojiNotDownloadedMessage,
     isQQMailMessage,
     isVoiceCallMessage,
     isOtherRichMessage,

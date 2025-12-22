@@ -33,6 +33,7 @@ import QQMailMessage from './message-types/QQMailMessage.vue'
 import QQMusicMessage from './message-types/QQMusicMessage.vue'
 import CardPackageMessage from './message-types/CardPackageMessage.vue'
 import VoiceCallMessage from './message-types/VoiceCallMessage.vue'
+import EmojiNotDownloadedMessage from './message-types/EmojiNotDownloadedMessage.vue'
 
 interface Props {
   message: Message
@@ -91,7 +92,8 @@ const {
   referMessageType,
   isSelf,
   isQQMailMessage,
-  isVoiceCallMessage
+  isVoiceCallMessage,
+  isEmojiNotDownloadedMessage
 } = useMessageContent(props.message)
 
 // 使用 URL 处理逻辑
@@ -549,6 +551,11 @@ const forwardedMessages = computed(() => {
             :show-media-resources="showMediaResources"
             :md5="message.contents?.md5"
             @click="handleFileClick"
+          />
+          <!-- 未下载表情包消息 (type=49, subType=8) -->
+          <EmojiNotDownloadedMessage
+            v-else-if="isEmojiNotDownloadedMessage"
+            :show-media-resources="showMediaResources"
           />
 
           <!-- 其他富文本消息 (type=49, 其他subType) -->
