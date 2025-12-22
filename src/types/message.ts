@@ -176,6 +176,8 @@ export const MessageTypeIcons: Record<MessageType, string> = {
 
 /**
  * 消息类型映射（字符串键版本）
+ * @deprecated 请使用 message-types/config.ts 中的配置
+ * 此映射表将在未来版本中移除
  */
 export const MessageTypeMap: Record<string, string> = {
   '1': '文本',
@@ -202,6 +204,8 @@ export const MessageTypeMap: Record<string, string> = {
 
 /**
  * 消息图标映射（字符串键版本）
+ * @deprecated 请使用 message-types/config.ts 中的配置
+ * 此映射表将在未来版本中移除
  */
 export const MessageIconMap: Record<string, string> = {
   '1': 'ChatLineSquare',
