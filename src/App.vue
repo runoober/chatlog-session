@@ -2,11 +2,16 @@
 import { onMounted } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { usePWAStore } from '@/stores/pwa'
+import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts'
 import InstallPrompt from '@/components/PWA/InstallPrompt.vue'
 import UpdateNotification from '@/components/PWA/UpdateNotification.vue'
+import KeyboardShortcutsHelp from '@/components/common/KeyboardShortcutsHelp.vue'
 
 const appStore = useAppStore()
 const pwaStore = usePWAStore()
+
+// 初始化全局键盘快捷键
+const { showHelp } = useKeyboardShortcuts()
 
 onMounted(() => {
   appStore.init()
@@ -19,6 +24,7 @@ onMounted(() => {
     <router-view />
     <InstallPrompt />
     <UpdateNotification />
+    <KeyboardShortcutsHelp v-model="showHelp" />
   </div>
 </template>
 

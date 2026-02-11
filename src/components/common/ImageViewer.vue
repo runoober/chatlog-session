@@ -82,7 +82,7 @@ const handleImageLoad = () => {
 const handleImageError = () => {
   imageError.value = true
   isImage.value = false // 切换尝试视频
-  
+
   if (isVideoReady.value) {
     resourceType.value = 'video'
     loading.value = false
@@ -132,7 +132,7 @@ watch(() => props.visible, (visible) => {
 // 键盘快捷键
 const handleKeydown = (e: KeyboardEvent) => {
   if (!props.visible) return
-  
+
   switch (e.key) {
     case 'Escape':
       handleClose()
@@ -196,9 +196,9 @@ watch(() => props.visible, (visible) => {
           v-show="isImage && !imageError"
           :src="imageUrl"
           :style="transformStyle"
-          class="viewer-image" 
-          loading="lazy" 
-          crossorigin="anonymous"
+          class="viewer-image"
+          loading="lazy"
+
           @load="handleImageLoad"
           @error="handleImageError"
         />

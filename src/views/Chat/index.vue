@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useAppStore } from '@/stores/app'
 import { useSessionStore } from '@/stores/session'
 import { useChatStore } from '@/stores/chat'
@@ -15,6 +16,7 @@ import ChatHeader from '@/components/chat/ChatHeader.vue'
 import MobileNavBar from '@/components/layout/MobileNavBar.vue'
 import SearchDialog from '@/components/chat/SearchDialog.vue'
 import ContactDetail from '@/views/Contact/ContactDetail.vue'
+import ChatExportDialog from '@/components/chat/ChatExportDialog.vue'
 import { useDisplayName } from '@/components/chat/composables'
 import type { Session, SessionFilterType } from '@/types'
 
@@ -27,10 +29,7 @@ const sessionListRef = ref()
 const messageListComponent = ref()
 
 // 移动端手势管理器
-const {
-  bindGestureEvents,
-  unbindGestureEvents
-} = useMobileGesture()
+const { bindGestureEvents, unbindGestureEvents } = useMobileGesture()
 
 // 自动刷新管理器
 const {
@@ -38,7 +37,7 @@ const {
   autoRefreshInterval,
   toggleAutoRefresh,
   init: initAutoRefresh,
-  cleanup: cleanupAutoRefresh
+  cleanup: cleanupAutoRefresh,
 } = useAutoRefreshManager(sessionListRef)
 
 // 搜索文本
@@ -46,6 +45,12 @@ const searchText = ref('')
 
 // 筛选类型
 const filterType = ref<SessionFilterType>('chat')
+
+// 导出对话框可见性
+const showExportDialog = ref(false)
+
+// 导出中状态（用于 beforeunload 提示）
+const isExporting = ref(false)
 
 // 当前选中的会话
 const currentSession = computed(() => {
@@ -60,7 +65,7 @@ const currentSessionTime = ref<string | undefined>(undefined)
 // 使用 displayName composable 获取移动端显示名称
 const { displayName: mobileDisplayName } = useDisplayName({
   id: computed(() => currentSession.value?.id),
-  defaultName: computed(() => currentSession.value?.name || currentSession.value?.talkerName || '')
+  defaultName: computed(() => currentSession.value?.name || currentSession.value?.talkerName || ''),
 })
 
 // 处理会话选择
@@ -84,15 +89,11 @@ const {
   sessionDetailDrawerVisible,
   sessionDetailContactId,
   sessionDetailDrawerTitle,
-  handleShowSessionDetail
+  handleShowSessionDetail,
 } = useSessionDetail(() => currentSession.value)
 
 // 消息搜索管理器
-const {
-  searchDialogVisible,
-  handleSearchMessages,
-  handleSearchMessageClick
-} = useMessageSearch(
+const { searchDialogVisible, handleSearchMessages, handleSearchMessageClick } = useMessageSearch(
   () => currentSession.value,
   handleSessionSelect,
   (messageId: string) => {
@@ -137,6 +138,34 @@ const handleMobileBack = () => {
   appStore.navigateBack()
 }
 
+// 处理导出聊天记录
+const handleExport = () => {
+  if (!currentSession.value) {
+    ElMessage.warning('请先选择一个会话')
+    return
+  }
+  showExportDialog.value = true
+}
+
+// 处理导出完成
+const handleExportSuccess = () => {
+  isExporting.value = false
+}
+
+// 处理导出对话框关闭
+const handleExportClose = () => {
+  isExporting.value = false
+}
+
+// beforeunload 事件处理器
+const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+  if (isExporting.value) {
+    e.preventDefault()
+    e.returnValue = '正在导出聊天记录，确定要离开吗？'
+    return e.returnValue
+  }
+}
+
 // 手势相关 - 已移动到 useMobileGesture composable
 
 onMounted(async () => {
@@ -153,6 +182,9 @@ onMounted(async () => {
 
   // 初始化联系人自动加载
   initAutoLoad()
+
+  // 添加 beforeunload 事件监听
+  window.addEventListener('beforeunload', handleBeforeUnload)
 })
 
 onUnmounted(() => {
@@ -164,20 +196,20 @@ onUnmounted(() => {
 
   // 清理 chatStore 事件监听器
   chatStore.cleanup()
+
+  // 移除 beforeunload 事件监听
+  window.removeEventListener('beforeunload', handleBeforeUnload)
 })
 </script>
 
 <template>
-  <div
-    class="chat-page"
-    :class="{ 'mobile-page': appStore.isMobile }"
-  >
+  <div class="chat-page" :class="{ 'mobile-page': appStore.isMobile }">
     <div class="chat-container">
       <!-- 会话列表区域 -->
       <div
         class="session-panel"
         :class="{
-          'mobile-hidden': appStore.isMobile && appStore.showMessageList
+          'mobile-hidden': appStore.isMobile && appStore.showMessageList,
         }"
       >
         <div class="session-header">
@@ -187,7 +219,9 @@ onUnmounted(() => {
               {{ sessionStore.totalUnreadCount }}
             </el-tag>
             <el-tooltip
-              :content="autoRefreshEnabled ? `自动刷新已启用（${autoRefreshInterval}秒）` : '自动刷新已停用'"
+              :content="
+                autoRefreshEnabled ? `自动刷新已启用（${autoRefreshInterval}秒）` : '自动刷新已停用'
+              "
               placement="bottom"
             >
               <el-button
@@ -236,13 +270,19 @@ onUnmounted(() => {
       <div
         class="message-panel"
         :class="{
-          'mobile-visible': appStore.isMobile && appStore.showMessageList
+          'mobile-visible': appStore.isMobile && appStore.showMessageList,
         }"
       >
         <!-- 移动端顶部导航栏 -->
         <MobileNavBar
           v-if="appStore.isMobile && currentSession"
-          :title="mobileDisplayName || currentSession.remark || currentSession.name || currentSession.talkerName || '聊天'"
+          :title="
+            mobileDisplayName ||
+            currentSession.remark ||
+            currentSession.name ||
+            currentSession.talkerName ||
+            '聊天'
+          "
           :subtitle="mobileSubtitle"
           :show-back="true"
           :show-refresh="true"
@@ -256,11 +296,7 @@ onUnmounted(() => {
 
         <!-- 未选中会话时的欢迎页 -->
         <div v-if="!currentSession" class="message-welcome">
-          <el-result
-            icon="success"
-            title="Chatlog Session"
-            sub-title="微信聊天记录查看器"
-          >
+          <el-result icon="success" title="Chatlog Session" sub-title="微信聊天记录查看器">
             <template #icon>
               <el-icon size="80" color="var(--el-color-primary)">
                 <ChatLineSquare />
@@ -292,7 +328,7 @@ onUnmounted(() => {
             @back="toggleSidebar"
             @refresh="handleRefresh"
             @search="handleSearchMessages"
-            @export="() => {}"
+            @export="handleExport"
             @info="handleShowSessionDetail"
           />
 
@@ -302,6 +338,15 @@ onUnmounted(() => {
             :session-id="currentSession?.talker"
             :session-name="currentSession?.name || currentSession?.talkerName || ''"
             @message-click="handleSearchMessageClick"
+          />
+
+          <!-- 导出对话框 -->
+          <ChatExportDialog
+            v-model:visible="showExportDialog"
+            :session-id="currentSession?.talker"
+            :session-name="currentSession?.name || currentSession?.talkerName || ''"
+            @close="handleExportClose"
+            @success="handleExportSuccess"
           />
 
           <!-- 会话详情抽屉 -->
@@ -427,7 +472,6 @@ onUnmounted(() => {
       }
     }
   }
-
 }
 
 // 移动端页面

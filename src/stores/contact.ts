@@ -665,7 +665,7 @@ export const useContactStore = defineStore('contact', () => {
       loading.value = true
 
       // 先从缓存获取
-      const cachedMap = await db.getContacts(wxids).catch(() => new Map())
+      const cachedMap = await db.getBatchContacts(wxids).catch(() => new Map())
       const needFetch: string[] = []
 
       wxids.forEach(wxid => {

@@ -10,6 +10,7 @@ import MobileTabBar from '@/components/layout/MobileTabBar.vue'
 
 const DashboardView = defineAsyncComponent(() => import('./Dashboard/index.vue'))
 
+
 const appStore = useAppStore()
 const contactStore = useContactStore()
 
