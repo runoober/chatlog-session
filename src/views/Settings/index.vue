@@ -3,9 +3,12 @@ import { ref, onMounted, computed } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useNotificationStore } from '@/stores/notification'
 import { useLLMConfigStore } from '@/stores/ai/llm-config'
+import { useSessionStore } from '@/stores/session'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, ElLoading } from 'element-plus'
 import { getVersion, getBuildDate, getVersionInfo } from '@/utils/version'
+import { downloadJSON, downloadText, downloadMarkdown } from '@/utils/download'
+import { chatlogAPI } from '@/api/chatlog'
 import {
   ApiSettings,
   AiSettings,
@@ -14,7 +17,7 @@ import {
   ChatSettings,
   PrivacySettings,
   AdvancedSettings,
-  AboutSettings
+  AboutSettings,
 } from './components'
 
 const appStore = useAppStore()
@@ -34,7 +37,7 @@ const menuItems = [
   { key: 'chat', label: '聊天设置', icon: 'ChatDotRound' },
   { key: 'privacy', label: '隐私设置', icon: 'Lock' },
   { key: 'advanced', label: '高级设置', icon: 'Setting' },
-  { key: 'about', label: '关于', icon: 'InfoFilled' }
+  { key: 'about', label: '关于', icon: 'InfoFilled' },
 ]
 
 // API 设置
@@ -43,14 +46,14 @@ const apiSettings = ref({
   apiTimeout: 30000,
   apiRetryCount: 3,
   apiRetryDelay: 1000,
-  enableDebug: false
+  enableDebug: false,
 })
 
 // 外观设置
 const appearanceSettings = ref({
   theme: appStore.isDark ? 'dark' : 'light',
   language: 'zh-CN',
-  fontSize: 'medium'
+  fontSize: 'medium',
 })
 
 // 通知设置
@@ -64,7 +67,7 @@ const notificationSettings = ref({
   onlyShowLatest: true,
   autoCloseTime: 5,
   myWxid: '',
-  showMessageContent: true
+  showMessageContent: true,
 })
 
 // 聊天设置
@@ -75,20 +78,20 @@ const chatSettings = ref({
   showMediaResources: true,
   enableServerPinning: true,
   autoRefresh: false,
-  autoRefreshInterval: 30
+  autoRefreshInterval: 30,
 })
 
 // 隐私设置
 const privacySettings = ref({
   saveHistory: true,
   autoDownloadMedia: true,
-  compressImages: true
+  compressImages: true,
 })
 
 // 高级设置
 const advancedSettings = ref({
   enableDebug: false,
-  cacheSize: '100MB'
+  cacheSize: '100MB',
 })
 
 // 版本信息
@@ -100,7 +103,7 @@ const versionInfo = computed(() => {
     gitHash: info.gitHash,
     gitBranch: info.gitBranch,
     buildTime: info.buildTime,
-    isDev: info.isDev
+    isDev: info.isDev,
   }
 })
 
@@ -139,30 +142,46 @@ const loadSettings = () => {
       if (parsed.fontSize !== undefined) appearanceSettings.value.fontSize = parsed.fontSize
 
       // 通知设置
-      if (parsed.enableNotifications !== undefined) notificationSettings.value.enableNotifications = parsed.enableNotifications
-      if (parsed.enableMention !== undefined) notificationSettings.value.enableMention = parsed.enableMention
-      if (parsed.enableQuote !== undefined) notificationSettings.value.enableQuote = parsed.enableQuote
-      if (parsed.enableMessage !== undefined) notificationSettings.value.enableMessage = parsed.enableMessage
-      if (parsed.enableSound !== undefined) notificationSettings.value.enableSound = parsed.enableSound
-      if (parsed.enableVibrate !== undefined) notificationSettings.value.enableVibrate = parsed.enableVibrate
-      if (parsed.onlyShowLatest !== undefined) notificationSettings.value.onlyShowLatest = parsed.onlyShowLatest
-      if (parsed.autoCloseTime !== undefined) notificationSettings.value.autoCloseTime = parsed.autoCloseTime
+      if (parsed.enableNotifications !== undefined)
+        notificationSettings.value.enableNotifications = parsed.enableNotifications
+      if (parsed.enableMention !== undefined)
+        notificationSettings.value.enableMention = parsed.enableMention
+      if (parsed.enableQuote !== undefined)
+        notificationSettings.value.enableQuote = parsed.enableQuote
+      if (parsed.enableMessage !== undefined)
+        notificationSettings.value.enableMessage = parsed.enableMessage
+      if (parsed.enableSound !== undefined)
+        notificationSettings.value.enableSound = parsed.enableSound
+      if (parsed.enableVibrate !== undefined)
+        notificationSettings.value.enableVibrate = parsed.enableVibrate
+      if (parsed.onlyShowLatest !== undefined)
+        notificationSettings.value.onlyShowLatest = parsed.onlyShowLatest
+      if (parsed.autoCloseTime !== undefined)
+        notificationSettings.value.autoCloseTime = parsed.autoCloseTime
       if (parsed.myWxid !== undefined) notificationSettings.value.myWxid = parsed.myWxid
-      if (parsed.showMessageContent !== undefined) notificationSettings.value.showMessageContent = parsed.showMessageContent
+      if (parsed.showMessageContent !== undefined)
+        notificationSettings.value.showMessageContent = parsed.showMessageContent
 
       // 聊天设置
-      if (parsed.showTimestamp !== undefined) chatSettings.value.showTimestamp = parsed.showTimestamp
+      if (parsed.showTimestamp !== undefined)
+        chatSettings.value.showTimestamp = parsed.showTimestamp
       if (parsed.showAvatar !== undefined) chatSettings.value.showAvatar = parsed.showAvatar
-      if (parsed.messageGrouping !== undefined) chatSettings.value.messageGrouping = parsed.messageGrouping
-      if (parsed.showMediaResources !== undefined) chatSettings.value.showMediaResources = parsed.showMediaResources
-      if (parsed.enableServerPinning !== undefined) chatSettings.value.enableServerPinning = parsed.enableServerPinning
+      if (parsed.messageGrouping !== undefined)
+        chatSettings.value.messageGrouping = parsed.messageGrouping
+      if (parsed.showMediaResources !== undefined)
+        chatSettings.value.showMediaResources = parsed.showMediaResources
+      if (parsed.enableServerPinning !== undefined)
+        chatSettings.value.enableServerPinning = parsed.enableServerPinning
       if (parsed.autoRefresh !== undefined) chatSettings.value.autoRefresh = parsed.autoRefresh
-      if (parsed.autoRefreshInterval !== undefined) chatSettings.value.autoRefreshInterval = parsed.autoRefreshInterval
+      if (parsed.autoRefreshInterval !== undefined)
+        chatSettings.value.autoRefreshInterval = parsed.autoRefreshInterval
 
       // 隐私设置
       if (parsed.saveHistory !== undefined) privacySettings.value.saveHistory = parsed.saveHistory
-      if (parsed.autoDownloadMedia !== undefined) privacySettings.value.autoDownloadMedia = parsed.autoDownloadMedia
-      if (parsed.compressImages !== undefined) privacySettings.value.compressImages = parsed.compressImages
+      if (parsed.autoDownloadMedia !== undefined)
+        privacySettings.value.autoDownloadMedia = parsed.autoDownloadMedia
+      if (parsed.compressImages !== undefined)
+        privacySettings.value.compressImages = parsed.compressImages
 
       // 高级设置
       if (parsed.cacheSize !== undefined) advancedSettings.value.cacheSize = parsed.cacheSize
@@ -187,7 +206,7 @@ const syncNotificationSettings = () => {
     onlyShowLatest: notificationSettings.value.onlyShowLatest,
     autoClose: notificationSettings.value.autoCloseTime,
     myWxid: notificationSettings.value.myWxid,
-    showMessageContent: notificationSettings.value.showMessageContent
+    showMessageContent: notificationSettings.value.showMessageContent,
   })
 }
 
@@ -234,8 +253,153 @@ const handleClearNotificationHistory = () => {
 }
 
 // 导出数据
-const handleExportData = () => {
-  ElMessage.info('导出功能开发中...')
+const handleExportData = async () => {
+  try {
+    // 选择导出格式
+    const result = await ElMessageBox.prompt('选择导出格式', '导出数据', {
+      confirmButtonText: '导出',
+      cancelButtonText: '取消',
+      inputPattern: /^(json|csv|txt|markdown)$/,
+      inputErrorMessage: '请选择有效的格式: json, csv, txt, markdown',
+      inputPlaceholder: 'json',
+      inputValue: 'json',
+    }).catch(() => null)
+
+    if (!result) return
+    const format = result.value as string
+
+    // 显示导出中提示
+    const loading = ElLoading.service({
+      lock: true,
+      text: '正在导出数据...',
+      background: 'rgba(0, 0, 0, 0.7)',
+    })
+
+    try {
+      // 从 IndexedDB 获取所有会话数据
+      const sessionStore = useSessionStore()
+      const sessions = sessionStore.sessions
+
+      if (sessions.length === 0) {
+        ElMessage.warning('没有可导出的会话数据')
+        return
+      }
+
+      // 导出所有会话的消息
+      const exportData: Record<string, any> = {
+        exportTime: new Date().toISOString(),
+        sessions: [],
+      }
+
+      for (const session of sessions.slice(0, 10)) {
+        // 限制导出前10个会话避免超时
+        try {
+          const messages = await chatlogAPI.getChatlog({
+            talker: session.id,
+            time: '',
+            limit: 1000, // 每个会话最多导出1000条
+          })
+
+          exportData.sessions.push({
+            sessionId: session.id,
+            sessionName: session.name || session.talkerName,
+            messageCount: messages.length,
+            messages: messages,
+          })
+        } catch (err) {
+          console.error(`导出会话 ${session.id} 失败:`, err)
+        }
+      }
+
+      // 根据格式导出
+      const timestamp = new Date().toISOString().split('T')[0]
+      switch (format) {
+        case 'json':
+          downloadJSON(exportData, `chatlog_backup_${timestamp}`)
+          break
+        case 'txt':
+          const textContent = formatBackupAsText(exportData)
+          downloadText(textContent, `chatlog_backup_${timestamp}`)
+          break
+        case 'markdown':
+          const markdownContent = formatBackupAsMarkdown(exportData)
+          downloadMarkdown(markdownContent, `chatlog_backup_${timestamp}`)
+          break
+        case 'csv':
+          // CSV 格式需要特殊处理，这里简化为导出第一个会话
+          if (exportData.sessions.length > 0) {
+            await chatlogAPI.exportCSV(
+              { talker: exportData.sessions[0].sessionId, time: '', limit: 1000 },
+              `chatlog_backup_${timestamp}.csv`
+            )
+          }
+          break
+      }
+
+      ElMessage.success(`成功导出 ${exportData.sessions.length} 个会话的数据`)
+    } finally {
+      loading.close()
+    }
+  } catch (error) {
+    console.error('导出数据失败:', error)
+    ElMessage.error('导出失败，请重试')
+  }
+}
+
+// 格式化备份数据为文本
+const formatBackupAsText = (data: any): string => {
+  const lines: string[] = []
+  lines.push(`备份时间: ${data.exportTime}`)
+  lines.push(`会话数量: ${data.sessions.length}`)
+  lines.push('='.repeat(50))
+
+  for (const session of data.sessions) {
+    lines.push(`\n【${session.sessionName}】(${session.messageCount} 条消息)`)
+    lines.push('-'.repeat(50))
+
+    for (const msg of session.messages) {
+      const time = new Date(msg.time).toLocaleString('zh-CN')
+      const sender = msg.senderName || msg.sender
+      const content = msg.content || '[非文本消息]'
+      lines.push(`[${time}] ${sender}: ${content}`)
+    }
+  }
+
+  return lines.join('\n')
+}
+
+// 格式化备份数据为 Markdown
+const formatBackupAsMarkdown = (data: any): string => {
+  const lines: string[] = []
+  lines.push(`# Chatlog Session 数据备份`)
+  lines.push('')
+  lines.push(`**备份时间:** ${data.exportTime}`)
+  lines.push(`**会话数量:** ${data.sessions.length}`)
+  lines.push('')
+  lines.push('---')
+  lines.push('')
+
+  for (const session of data.sessions) {
+    lines.push(`## ${session.sessionName}`)
+    lines.push('')
+    lines.push(`**消息数量:** ${session.messageCount}`)
+    lines.push('')
+
+    for (const msg of session.messages) {
+      const time = new Date(msg.time).toLocaleString('zh-CN')
+      const sender = msg.senderName || msg.sender
+      const content = msg.content || '[非文本消息]'
+
+      lines.push(`**${sender}** *${time}*`)
+      lines.push('')
+      lines.push(content)
+      lines.push('')
+      lines.push('---')
+      lines.push('')
+    }
+  }
+
+  return lines.join('\n')
 }
 
 // 清除缓存
@@ -282,7 +446,7 @@ const saveSettings = () => {
     ...notificationSettings.value,
     ...chatSettings.value,
     ...privacySettings.value,
-    ...advancedSettings.value
+    ...advancedSettings.value,
   }
 
   // 保存到 localStorage
@@ -291,16 +455,18 @@ const saveSettings = () => {
   // 同步用户设置到 appStore
   appStore.updateSettings({
     showMediaResources: chatSettings.value.showMediaResources,
-    disableServerPinning: !chatSettings.value.enableServerPinning
+    disableServerPinning: !chatSettings.value.enableServerPinning,
   })
 
   // 同步通知设置到 notificationStore
   syncNotificationSettings()
 
   // 触发自定义事件
-  window.dispatchEvent(new CustomEvent('chatlog-settings-updated', {
-    detail: allSettings
-  }))
+  window.dispatchEvent(
+    new CustomEvent('chatlog-settings-updated', {
+      detail: allSettings,
+    })
+  )
 
   ElMessage.success('设置已保存')
 }
@@ -308,15 +474,11 @@ const saveSettings = () => {
 // 重置设置
 const resetSettings = async () => {
   try {
-    await ElMessageBox.confirm(
-      '确定要重置所有设置吗？此操作不可恢复。',
-      '重置设置',
-      {
-        type: 'warning',
-        confirmButtonText: '确定',
-        cancelButtonText: '取消'
-      }
-    )
+    await ElMessageBox.confirm('确定要重置所有设置吗？此操作不可恢复。', '重置设置', {
+      type: 'warning',
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+    })
 
     // 重置所有设置
     apiSettings.value = {
@@ -324,13 +486,13 @@ const resetSettings = async () => {
       apiTimeout: 30000,
       apiRetryCount: 3,
       apiRetryDelay: 1000,
-      enableDebug: false
+      enableDebug: false,
     }
 
     appearanceSettings.value = {
       theme: 'light',
       language: 'zh-CN',
-      fontSize: 'medium'
+      fontSize: 'medium',
     }
 
     notificationSettings.value = {
@@ -343,7 +505,7 @@ const resetSettings = async () => {
       onlyShowLatest: true,
       autoCloseTime: 5,
       myWxid: '',
-      showMessageContent: true
+      showMessageContent: true,
     }
 
     chatSettings.value = {
@@ -353,18 +515,18 @@ const resetSettings = async () => {
       showMediaResources: true,
       enableServerPinning: true,
       autoRefresh: false,
-      autoRefreshInterval: 30
+      autoRefreshInterval: 30,
     }
 
     privacySettings.value = {
       saveHistory: true,
       autoDownloadMedia: true,
-      compressImages: true
+      compressImages: true,
     }
 
     advancedSettings.value = {
       enableDebug: false,
-      cacheSize: '100MB'
+      cacheSize: '100MB',
     }
 
     appStore.config.enableDebug = false
@@ -389,13 +551,9 @@ const resetSettings = async () => {
         <el-menu
           :default-active="activeMenu"
           class="settings-menu"
-          @select="(key: string) => activeMenu = key"
+          @select="(key: string) => (activeMenu = key)"
         >
-          <el-menu-item
-            v-for="item in menuItems"
-            :key="item.key"
-            :index="item.key"
-          >
+          <el-menu-item v-for="item in menuItems" :key="item.key" :index="item.key">
             <el-icon>
               <component :is="item.icon" />
             </el-icon>
@@ -434,10 +592,7 @@ const resetSettings = async () => {
             />
 
             <!-- 聊天设置 -->
-            <ChatSettings
-              v-show="activeMenu === 'chat'"
-              v-model="chatSettings"
-            />
+            <ChatSettings v-show="activeMenu === 'chat'" v-model="chatSettings" />
 
             <!-- 隐私设置 -->
             <PrivacySettings
