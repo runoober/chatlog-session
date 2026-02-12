@@ -12,10 +12,13 @@ const emit = defineEmits<{
   'update:modelValue': [value: AdvancedSettingsData]
 }>()
 
-const updateValue = <K extends keyof AdvancedSettingsData>(key: K, value: AdvancedSettingsData[K]) => {
+const updateValue = <K extends keyof AdvancedSettingsData>(
+  key: K,
+  value: AdvancedSettingsData[K]
+) => {
   emit('update:modelValue', {
     ...props.modelValue,
-    [key]: value
+    [key]: value,
   })
 }
 </script>
@@ -31,17 +34,15 @@ const updateValue = <K extends keyof AdvancedSettingsData>(key: K, value: Advanc
       <el-form-item label="调试模式">
         <el-switch
           :model-value="modelValue.enableDebug"
-          @update:model-value="(val) => updateValue('enableDebug', val as boolean)"
+          @update:model-value="
+            (val: string | number | boolean) => updateValue('enableDebug', val as boolean)
+          "
         />
         <span class="form-tip">在控制台输出 API 请求详情和调试信息</span>
       </el-form-item>
 
       <el-form-item label="缓存大小">
-        <el-input
-          :model-value="modelValue.cacheSize"
-          readonly
-          style="width: 200px"
-        />
+        <el-input :model-value="modelValue.cacheSize" readonly style="width: 200px" />
       </el-form-item>
     </el-form>
   </div>

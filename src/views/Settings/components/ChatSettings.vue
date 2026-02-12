@@ -20,7 +20,7 @@ const emit = defineEmits<{
 const updateValue = <K extends keyof ChatSettingsData>(key: K, value: ChatSettingsData[K]) => {
   emit('update:modelValue', {
     ...props.modelValue,
-    [key]: value
+    [key]: value,
   })
 }
 </script>
@@ -36,21 +36,21 @@ const updateValue = <K extends keyof ChatSettingsData>(key: K, value: ChatSettin
       <el-form-item label="显示时间">
         <el-switch
           :model-value="modelValue.showTimestamp"
-          @update:model-value="(val) => updateValue('showTimestamp', val as boolean)"
+          @update:model-value="(val: string | number | boolean) => updateValue('showTimestamp', val as boolean)"
         />
       </el-form-item>
 
       <el-form-item label="显示头像">
         <el-switch
           :model-value="modelValue.showAvatar"
-          @update:model-value="(val) => updateValue('showAvatar', val as boolean)"
+          @update:model-value="(val: string | number | boolean) => updateValue('showAvatar', val as boolean)"
         />
       </el-form-item>
 
       <el-form-item label="消息分组">
         <el-switch
           :model-value="modelValue.messageGrouping"
-          @update:model-value="(val) => updateValue('messageGrouping', val as boolean)"
+          @update:model-value="(val: string | number | boolean) => updateValue('messageGrouping', val as boolean)"
         />
         <span class="form-tip">相同发送者的连续消息合并显示</span>
       </el-form-item>
@@ -58,7 +58,7 @@ const updateValue = <K extends keyof ChatSettingsData>(key: K, value: ChatSettin
       <el-form-item label="同步服务端置顶">
         <el-switch
           :model-value="modelValue.enableServerPinning"
-          @update:model-value="(val) => updateValue('enableServerPinning', val as boolean)"
+          @update:model-value="(val: string | number | boolean) => updateValue('enableServerPinning', val as boolean)"
         />
         <span class="form-tip">关闭后仅显示本地置顶会话</span>
       </el-form-item>
@@ -68,7 +68,7 @@ const updateValue = <K extends keyof ChatSettingsData>(key: K, value: ChatSettin
       <el-form-item label="显示媒体资源">
         <el-switch
           :model-value="modelValue.showMediaResources"
-          @update:model-value="(val) => updateValue('showMediaResources', val as boolean)"
+          @update:model-value="(val: string | number | boolean) => updateValue('showMediaResources', val as boolean)"
         />
         <span class="form-tip">显示图片、视频、表情等外部资源</span>
       </el-form-item>
@@ -92,7 +92,7 @@ const updateValue = <K extends keyof ChatSettingsData>(key: K, value: ChatSettin
       <el-form-item label="自动刷新">
         <el-switch
           :model-value="modelValue.autoRefresh"
-          @update:model-value="(val) => updateValue('autoRefresh', val as boolean)"
+          @update:model-value="(val: string | number | boolean) => updateValue('autoRefresh', val as boolean)"
         />
         <span class="form-tip">自动刷新会话列表和消息</span>
       </el-form-item>
@@ -104,11 +104,12 @@ const updateValue = <K extends keyof ChatSettingsData>(key: K, value: ChatSettin
           :max="300"
           :step="10"
           style="width: 200px"
-          @update:model-value="(val) => val !== undefined && updateValue('autoRefreshInterval', val)"
+          @update:model-value="
+            (val: number | undefined) =>
+              val !== undefined && updateValue('autoRefreshInterval', val)
+          "
         />
-        <el-text type="info" size="small" style="margin-left: 12px">
-          秒（s）
-        </el-text>
+        <el-text type="info" size="small" style="margin-left: 12px"> 秒（s） </el-text>
       </el-form-item>
     </el-form>
   </div>

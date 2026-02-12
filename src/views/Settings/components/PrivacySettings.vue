@@ -13,14 +13,17 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: PrivacySettingsData]
-  'exportData': []
-  'clearCache': []
+  exportData: []
+  clearCache: []
 }>()
 
-const updateValue = <K extends keyof PrivacySettingsData>(key: K, value: PrivacySettingsData[K]) => {
+const updateValue = <K extends keyof PrivacySettingsData>(
+  key: K,
+  value: PrivacySettingsData[K]
+) => {
   emit('update:modelValue', {
     ...props.modelValue,
-    [key]: value
+    [key]: value,
   })
 }
 
@@ -30,15 +33,11 @@ const handleExportData = () => {
 
 const handleClearCache = async () => {
   try {
-    await ElMessageBox.confirm(
-      '确定要清除所有缓存数据吗？此操作不可恢复。',
-      '确认清除',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
-    )
+    await ElMessageBox.confirm('确定要清除所有缓存数据吗？此操作不可恢复。', '确认清除', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
     emit('clearCache')
   } catch {
     // 用户取消
@@ -57,14 +56,14 @@ const handleClearCache = async () => {
       <el-form-item label="保存历史">
         <el-switch
           :model-value="modelValue.saveHistory"
-          @update:model-value="(val) => updateValue('saveHistory', val as boolean)"
+          @update:model-value="(val: string | number | boolean) => updateValue('saveHistory', val as boolean)"
         />
       </el-form-item>
 
       <el-form-item label="自动下载">
         <el-switch
           :model-value="modelValue.autoDownloadMedia"
-          @update:model-value="(val) => updateValue('autoDownloadMedia', val as boolean)"
+          @update:model-value="(val: string | number | boolean) => updateValue('autoDownloadMedia', val as boolean)"
         />
         <span class="form-tip">自动下载图片和视频</span>
       </el-form-item>
@@ -72,7 +71,7 @@ const handleClearCache = async () => {
       <el-form-item label="压缩图片">
         <el-switch
           :model-value="modelValue.compressImages"
-          @update:model-value="(val) => updateValue('compressImages', val as boolean)"
+          @update:model-value="(val: string | number | boolean) => updateValue('compressImages', val as boolean)"
         />
       </el-form-item>
 

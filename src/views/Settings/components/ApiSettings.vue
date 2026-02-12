@@ -24,68 +24,68 @@ const apiTimeoutOptions = [
   { label: '10 秒', value: 10000 },
   { label: '30 秒', value: 30000 },
   { label: '60 秒', value: 60000 },
-  { label: '120 秒', value: 120000 }
+  { label: '120 秒', value: 120000 },
 ]
 
 const retryCountOptions = [
   { label: '不重试', value: 0 },
   { label: '1 次', value: 1 },
   { label: '3 次', value: 3 },
-  { label: '5 次', value: 5 }
+  { label: '5 次', value: 5 },
 ]
 
 const updateValue = <K extends keyof ApiSettingsData>(key: K, value: ApiSettingsData[K]) => {
   emit('update:modelValue', {
     ...props.modelValue,
-    [key]: value
+    [key]: value,
   })
 }
 
 const testApiConnection = async () => {
   testingApi.value = true
-  
+
   try {
     // 标准化 API 地址
     let baseUrl = props.modelValue.apiBaseUrl.trim()
     if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
       baseUrl = `http://${baseUrl}`
     }
-    
+
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), props.modelValue.apiTimeout)
-    
+
     const response = await fetch(`${baseUrl}/api/v1/dashboard`, {
       method: 'GET',
       signal: controller.signal,
       headers: {
-        'Accept': 'application/json'
-      }
+        Accept: 'application/json',
+      },
     })
-    
+
     clearTimeout(timeoutId)
-    
+
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
-    
+
     // 尝试解析返回数据验证是否是有效的 API
     await response.json()
-    
+
     ElMessage({
       type: 'success',
-      message: '连接成功！API 可访问'
+      message: '连接成功！API 可访问',
     })
   } catch (error: unknown) {
     if (error instanceof Error && error.name === 'AbortError') {
       ElMessage({
         type: 'error',
-        message: '连接超时，请检查 API 地址和网络连接'
+        message: '连接超时，请检查 API 地址和网络连接',
       })
     } else {
       const message = error instanceof Error ? error.message : '未知错误'
       ElMessage({
         type: 'error',
-        message: `连接失败: ${message}`
+        message: `连接失败: ${message}`,
       })
     }
   } finally {
@@ -99,11 +99,11 @@ const resetApiSettings = () => {
     apiTimeout: 30000,
     apiRetryCount: 3,
     apiRetryDelay: 1000,
-    enableDebug: false
+    enableDebug: false,
   })
   ElMessage({
     type: 'success',
-    message: 'API 设置已重置'
+    message: 'API 设置已重置',
   })
 }
 </script>
@@ -121,7 +121,7 @@ const resetApiSettings = () => {
           :model-value="modelValue.apiBaseUrl"
           placeholder="http://localhost:5030"
           style="width: 400px"
-          @update:model-value="(val) => updateValue('apiBaseUrl', val)"
+          @update:model-value="(val: string) => updateValue('apiBaseUrl', val)"
         >
           <template #prepend>
             <el-icon><Link /></el-icon>
@@ -130,11 +130,7 @@ const resetApiSettings = () => {
       </el-form-item>
 
       <el-form-item label="连接测试">
-        <el-button
-          type="primary"
-          :loading="testingApi"
-          @click="testApiConnection"
-        >
+        <el-button type="primary" :loading="testingApi" @click="testApiConnection">
           <el-icon><Connection /></el-icon>
           测试连接
         </el-button>
@@ -149,7 +145,7 @@ const resetApiSettings = () => {
         <el-select
           :model-value="modelValue.apiTimeout"
           style="width: 200px"
-          @update:model-value="(val) => updateValue('apiTimeout', val)"
+          @update:model-value="(val: number) => updateValue('apiTimeout', val)"
         >
           <el-option
             v-for="option in apiTimeoutOptions"
@@ -158,16 +154,14 @@ const resetApiSettings = () => {
             :value="option.value"
           />
         </el-select>
-        <el-text type="info" size="small" style="margin-left: 12px">
-          API 请求的超时时间
-        </el-text>
+        <el-text type="info" size="small" style="margin-left: 12px"> API 请求的超时时间 </el-text>
       </el-form-item>
 
       <el-form-item label="重试次数">
         <el-select
           :model-value="modelValue.apiRetryCount"
           style="width: 200px"
-          @update:model-value="(val) => updateValue('apiRetryCount', val)"
+          @update:model-value="(val: number) => updateValue('apiRetryCount', val)"
         >
           <el-option
             v-for="option in retryCountOptions"
@@ -176,9 +170,7 @@ const resetApiSettings = () => {
             :value="option.value"
           />
         </el-select>
-        <el-text type="info" size="small" style="margin-left: 12px">
-          请求失败后的重试次数
-        </el-text>
+        <el-text type="info" size="small" style="margin-left: 12px"> 请求失败后的重试次数 </el-text>
       </el-form-item>
 
       <el-form-item label="重试延迟">
@@ -188,11 +180,11 @@ const resetApiSettings = () => {
           :max="10000"
           :step="100"
           style="width: 200px"
-          @update:model-value="(val) => val !== undefined && updateValue('apiRetryDelay', val)"
+          @update:model-value="
+            (val: number | undefined) => val !== undefined && updateValue('apiRetryDelay', val)
+          "
         />
-        <el-text type="info" size="small" style="margin-left: 12px">
-          毫秒（ms）
-        </el-text>
+        <el-text type="info" size="small" style="margin-left: 12px"> 毫秒（ms） </el-text>
       </el-form-item>
 
       <el-divider />
@@ -200,7 +192,9 @@ const resetApiSettings = () => {
       <el-form-item label="调试模式">
         <el-switch
           :model-value="modelValue.enableDebug"
-          @update:model-value="(val) => updateValue('enableDebug', val as boolean)"
+          @update:model-value="
+            (val: string | number | boolean) => updateValue('enableDebug', val as boolean)
+          "
         />
         <el-text type="info" size="small" style="margin-left: 12px">
           在控制台输出 API 请求详情和调试信息
@@ -215,12 +209,7 @@ const resetApiSettings = () => {
       </el-form-item>
     </el-form>
 
-    <el-alert
-      title="提示"
-      type="info"
-      :closable="false"
-      style="margin-top: 20px"
-    >
+    <el-alert title="提示" type="info" :closable="false" style="margin-top: 20px">
       <template #default>
         <div style="line-height: 1.8">
           <p>• API 地址格式: <code>http://host:port</code> 或 <code>https://domain.com</code></p>

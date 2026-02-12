@@ -11,31 +11,34 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: AppearanceSettingsData]
-  'themeChange': [theme: string]
+  themeChange: [theme: string]
 }>()
 
 const fontSizeOptions = [
   { label: '小', value: 'small' },
   { label: '中', value: 'medium' },
   { label: '大', value: 'large' },
-  { label: '特大', value: 'extra-large' }
+  { label: '特大', value: 'extra-large' },
 ]
 
 const languageOptions = [
   { label: '简体中文', value: 'zh-CN' },
-  { label: 'English', value: 'en-US' }
+  { label: 'English', value: 'en-US' },
 ]
 
 const themeOptions = [
   { label: '浅色', value: 'light', icon: 'Sunny' },
   { label: '深色', value: 'dark', icon: 'Moon' },
-  { label: '跟随系统', value: 'auto', icon: 'Monitor' }
+  { label: '跟随系统', value: 'auto', icon: 'Monitor' },
 ]
 
-const updateValue = <K extends keyof AppearanceSettingsData>(key: K, value: AppearanceSettingsData[K]) => {
+const updateValue = <K extends keyof AppearanceSettingsData>(
+  key: K,
+  value: AppearanceSettingsData[K]
+) => {
   emit('update:modelValue', {
     ...props.modelValue,
-    [key]: value
+    [key]: value,
   })
 }
 
@@ -55,15 +58,8 @@ const handleThemeChange = (val: string | number | boolean | undefined) => {
 
     <el-form label-position="left" label-width="120px">
       <el-form-item label="主题模式">
-        <el-radio-group
-          :model-value="modelValue.theme"
-          @update:model-value="handleThemeChange"
-        >
-          <el-radio-button
-            v-for="option in themeOptions"
-            :key="option.value"
-            :label="option.value"
-          >
+        <el-radio-group :model-value="modelValue.theme" @update:model-value="handleThemeChange">
+          <el-radio-button v-for="option in themeOptions" :key="option.value" :label="option.value">
             <el-icon><component :is="option.icon" /></el-icon>
             {{ option.label }}
           </el-radio-button>
@@ -74,7 +70,7 @@ const handleThemeChange = (val: string | number | boolean | undefined) => {
         <el-select
           :model-value="modelValue.language"
           style="width: 200px"
-          @update:model-value="(val) => updateValue('language', val)"
+          @update:model-value="(val: string) => updateValue('language', val)"
         >
           <el-option
             v-for="option in languageOptions"
@@ -88,7 +84,10 @@ const handleThemeChange = (val: string | number | boolean | undefined) => {
       <el-form-item label="字体大小">
         <el-radio-group
           :model-value="modelValue.fontSize"
-          @update:model-value="(val) => updateValue('fontSize', String(val))"
+          @update:model-value="
+            (val: string | number | boolean | undefined) =>
+              val !== undefined && updateValue('fontSize', String(val))
+          "
         >
           <el-radio-button
             v-for="option in fontSizeOptions"
