@@ -104,7 +104,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
       // 5. 验证 JSON 格式
       try {
         await response.json()
-      } catch (e) {
+      } catch (_e) {
         const errorMsg = '响应格式错误：无法解析 JSON'
         apiTestStatus.value = 'error'
         apiTestError.value = errorMsg

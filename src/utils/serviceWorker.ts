@@ -95,10 +95,9 @@ export class ServiceWorkerManager {
 
       console.log('[SW Manager] Registering Service Worker:', this.config.scriptUrl)
 
-      this.registration = await navigator.serviceWorker.register(
-        this.config.scriptUrl,
-        { scope: this.config.scope }
-      )
+      this.registration = await navigator.serviceWorker.register(this.config.scriptUrl, {
+        scope: this.config.scope,
+      })
 
       console.log('[SW Manager] Service Worker registered successfully')
       this.state = ServiceWorkerState.REGISTERED
@@ -192,7 +191,7 @@ export class ServiceWorkerManager {
     })
 
     // 监听来自 Service Worker 的消息
-    navigator.serviceWorker.addEventListener('message', (event) => {
+    navigator.serviceWorker.addEventListener('message', event => {
       console.log('[SW Manager] Message from SW:', event.data)
       this.emit('message', event.data)
     })
@@ -258,7 +257,7 @@ export class ServiceWorkerManager {
     return new Promise((resolve, reject) => {
       const messageChannel = new MessageChannel()
 
-      messageChannel.port1.onmessage = (event) => {
+      messageChannel.port1.onmessage = event => {
         if (event.data.success) {
           resolve(event.data)
         } else {
@@ -339,10 +338,7 @@ export class ServiceWorkerManager {
   /**
    * 显示通知（通过 Service Worker）
    */
-  async showNotification(
-    title: string,
-    options?: NotificationOptions
-  ): Promise<void> {
+  async showNotification(title: string, options?: NotificationOptions): Promise<void> {
     if (!this.registration) {
       throw new Error('Service Worker not registered')
     }
@@ -401,9 +397,9 @@ export class ServiceWorkerManager {
       throw new Error('Service Worker not registered')
     }
 
-    // @ts-ignore - Background Sync API 可能不被所有 TypeScript 版本识别
+    // @ts-ignore -- Background Sync API 可能不被所有 TypeScript 版本识别
     if ('sync' in this.registration) {
-      // @ts-ignore
+      // @ts-ignore -- sync API 类型定义缺失
       await this.registration.sync.register(tag)
       console.log('[SW Manager] Background sync registered:', tag)
     } else {
@@ -419,9 +415,9 @@ export class ServiceWorkerManager {
       throw new Error('Service Worker not registered')
     }
 
-    // @ts-ignore - Periodic Sync API 可能不被所有 TypeScript 版本识别
+    // @ts-ignore -- Periodic Sync API 可能不被所有 TypeScript 版本识别
     if ('periodicSync' in this.registration) {
-      // @ts-ignore
+      // @ts-ignore -- periodicSync API 类型定义缺失
       await this.registration.periodicSync.register(tag, { minInterval })
       console.log('[SW Manager] Periodic sync registered:', tag)
     } else {
@@ -463,10 +459,8 @@ export class ServiceWorkerManager {
    * 工具方法：将 Base64 字符串转换为 Uint8Array
    */
   private urlBase64ToUint8Array(base64String: string): Uint8Array {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4)
-    const base64 = (base64String + padding)
-      .replace(/-/g, '+')
-      .replace(/_/g, '/')
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
 
     const rawData = window.atob(base64)
     const outputArray = new Uint8Array(rawData.length)
@@ -530,14 +524,18 @@ export function getActiveServiceWorker(): ServiceWorker | null {
  * 等待 Service Worker 激活
  */
 export function waitForServiceWorkerActivation(): Promise<void> {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     if (navigator.serviceWorker.controller) {
       resolve()
       return
     }
 
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      resolve()
-    }, { once: true })
+    navigator.serviceWorker.addEventListener(
+      'controllerchange',
+      () => {
+        resolve()
+      },
+      { once: true }
+    )
   })
 }

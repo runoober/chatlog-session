@@ -6,12 +6,12 @@ import { mediaAPI } from '@/api/media'
 const PROXY_BASE = 'https://spmc.sponeur.com/proxy'
 const ALLOWED_DOMAINS = [
   'vweixinf.tc.qq.com',
-  'mmbiz.qpic.cn'
- // 'wxapp.tc.qq.com'
+  'mmbiz.qpic.cn',
+  // 'wxapp.tc.qq.com'
 ]
 
 function convertToProxyUrl(url: string): string {
-  if (window.location.host.indexOf('xlight')=== -1) return url
+  if (window.location.host.indexOf('xlight') === -1) return url
   if (!url || !url.startsWith('http://')) return url
 
   try {
@@ -19,7 +19,7 @@ function convertToProxyUrl(url: string): string {
     if (ALLOWED_DOMAINS.includes(urlObj.hostname)) {
       return `${PROXY_BASE}/${urlObj.hostname}${urlObj.pathname}${urlObj.search}`
     }
-  } catch (e) {
+  } catch (_e) {
     console.error('Invalid URL:', url)
   }
   return url
@@ -124,7 +124,9 @@ export function useMessageUrl(message: Message) {
   const shoppingMiniProgramTitle = computed(() => message.contents?.title || '购物小程序')
   const shoppingMiniProgramUrl = computed(() => message.contents?.url || '')
   const shoppingMiniProgramDesc = computed(() => message.contents?.desc || '')
-  const shoppingMiniProgramThumb = computed(() => message.contents?.thumbUrl || message.contents?.thumburl || '')
+  const shoppingMiniProgramThumb = computed(
+    () => message.contents?.thumbUrl || message.contents?.thumburl || ''
+  )
 
   // 小视频相关
   const shortVideoTitle = computed(() => message.contents?.title || '小视频')
@@ -164,6 +166,6 @@ export function useMessageUrl(message: Message) {
     locationLabel,
     locationX,
     locationY,
-    locationCityname
+    locationCityname,
   }
 }

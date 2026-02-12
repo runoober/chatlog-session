@@ -28,7 +28,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: NotificationSettingsData]
-  'clearHistory': []
+  clearHistory: []
 }>()
 
 const notificationPermission = ref<NotificationPermission>('default')
@@ -42,10 +42,13 @@ const checkNotificationPermission = () => {
 
 checkNotificationPermission()
 
-const updateValue = <K extends keyof NotificationSettingsData>(key: K, value: NotificationSettingsData[K]) => {
+const updateValue = <K extends keyof NotificationSettingsData>(
+  key: K,
+  value: NotificationSettingsData[K]
+) => {
   emit('update:modelValue', {
     ...props.modelValue,
-    [key]: value
+    [key]: value,
   })
 }
 
@@ -56,7 +59,7 @@ const requestNotificationPermission = async () => {
     if (result === 'granted') {
       ElMessage.success('通知权限已授予')
     }
-  } catch (error) {
+  } catch (_error) {
     ElMessage.error('请求通知权限失败')
   }
 }
@@ -73,7 +76,7 @@ const testNotification = () => {
       icon: '/favicon.ico',
       badge: '/favicon.ico',
       tag: 'test-notification',
-      requireInteraction: false
+      requireInteraction: false,
     })
 
     if (props.modelValue.enableSound) {
@@ -86,32 +89,28 @@ const testNotification = () => {
 
     ElMessage({
       message: '测试通知已发送',
-      duration: 3000
+      duration: 3000,
     })
 
     // 自动关闭测试通知
     setTimeout(() => {
       notification.close()
     }, 3000)
-  } catch (error) {
+  } catch (_error) {
     ElMessage({
       message: '发送通知失败',
-      duration: 3000
+      duration: 3000,
     })
   }
 }
 
 const clearNotificationHistory = async () => {
   try {
-    await ElMessageBox.confirm(
-      '确定要清空通知历史吗？此操作不可恢复。',
-      '确认清空',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
-    )
+    await ElMessageBox.confirm('确定要清空通知历史吗？此操作不可恢复。', '确认清空', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
     emit('clearHistory')
   } catch {
     // 用户取消
@@ -158,12 +157,7 @@ const clearNotificationHistory = async () => {
         </div>
       </el-alert>
 
-      <el-alert
-        v-else
-        type="success"
-        :closable="false"
-        style="margin-bottom: 16px"
-      >
+      <el-alert v-else type="success" :closable="false" style="margin-bottom: 16px">
         <template #title>
           <span style="font-size: 13px">通知权限已授予</span>
         </template>
@@ -175,7 +169,7 @@ const clearNotificationHistory = async () => {
       <el-form-item label="启用通知">
         <el-switch
           :model-value="modelValue.enableNotifications"
-          @update:model-value="(val) => updateValue('enableNotifications', val as boolean)"
+          @update:model-value="val => updateValue('enableNotifications', val as boolean)"
         />
         <span class="form-tip">关闭后将不会收到任何通知</span>
       </el-form-item>
@@ -193,7 +187,7 @@ const clearNotificationHistory = async () => {
           placeholder="请输入你的微信ID"
           :disabled="!modelValue.enableNotifications"
           style="width: 300px"
-          @update:model-value="(val) => updateValue('myWxid', val)"
+          @update:model-value="val => updateValue('myWxid', val)"
         />
         <span class="form-tip">用于识别哪些消息与你有关（如 @我）</span>
       </el-form-item>
@@ -202,7 +196,7 @@ const clearNotificationHistory = async () => {
         <el-switch
           :model-value="modelValue.showMessageContent"
           :disabled="!modelValue.enableNotifications"
-          @update:model-value="(val) => updateValue('showMessageContent', val as boolean)"
+          @update:model-value="val => updateValue('showMessageContent', val as boolean)"
         />
         <span class="form-tip">关闭后通知只显示"有新消息"，不显示具体内容（隐私保护）</span>
       </el-form-item>
@@ -218,7 +212,7 @@ const clearNotificationHistory = async () => {
         <el-switch
           :model-value="modelValue.enableMention"
           :disabled="!modelValue.enableNotifications"
-          @update:model-value="(val) => updateValue('enableMention', val as boolean)"
+          @update:model-value="val => updateValue('enableMention', val as boolean)"
         />
         <span class="form-tip">有人在群聊中 @你</span>
       </el-form-item>
@@ -227,7 +221,7 @@ const clearNotificationHistory = async () => {
         <el-switch
           :model-value="modelValue.enableQuote"
           :disabled="!modelValue.enableNotifications"
-          @update:model-value="(val) => updateValue('enableQuote', val as boolean)"
+          @update:model-value="val => updateValue('enableQuote', val as boolean)"
         />
         <span class="form-tip">有人引用了你的消息</span>
       </el-form-item>
@@ -236,7 +230,7 @@ const clearNotificationHistory = async () => {
         <el-switch
           :model-value="modelValue.enableMessage"
           :disabled="!modelValue.enableNotifications"
-          @update:model-value="(val) => updateValue('enableMessage', val as boolean)"
+          @update:model-value="val => updateValue('enableMessage', val as boolean)"
         />
         <span class="form-tip">所有新消息（可能会很多）</span>
       </el-form-item>
@@ -252,7 +246,7 @@ const clearNotificationHistory = async () => {
         <el-switch
           :model-value="modelValue.enableSound"
           :disabled="!modelValue.enableNotifications"
-          @update:model-value="(val) => updateValue('enableSound', val as boolean)"
+          @update:model-value="val => updateValue('enableSound', val as boolean)"
         />
       </el-form-item>
 
@@ -260,7 +254,7 @@ const clearNotificationHistory = async () => {
         <el-switch
           :model-value="modelValue.enableVibrate"
           :disabled="!modelValue.enableNotifications"
-          @update:model-value="(val) => updateValue('enableVibrate', val as boolean)"
+          @update:model-value="val => updateValue('enableVibrate', val as boolean)"
         />
         <span class="form-tip">仅移动设备支持</span>
       </el-form-item>
@@ -269,7 +263,7 @@ const clearNotificationHistory = async () => {
         <el-switch
           :model-value="modelValue.onlyShowLatest"
           :disabled="!modelValue.enableNotifications"
-          @update:model-value="(val) => updateValue('onlyShowLatest', val as boolean)"
+          @update:model-value="val => updateValue('onlyShowLatest', val as boolean)"
         />
         <span class="form-tip">新通知会替换旧通知</span>
       </el-form-item>
@@ -282,7 +276,7 @@ const clearNotificationHistory = async () => {
           :step="1"
           :disabled="!modelValue.enableNotifications"
           style="width: 150px"
-          @update:model-value="(val) => val !== undefined && updateValue('autoCloseTime', val)"
+          @update:model-value="val => val !== undefined && updateValue('autoCloseTime', val)"
         />
         <el-text type="info" size="small" style="margin-left: 12px">
           秒（0 表示不自动关闭）
@@ -293,10 +287,7 @@ const clearNotificationHistory = async () => {
 
       <!-- 通知测试 -->
       <el-form-item label="测试通知">
-        <el-button
-          :disabled="notificationPermission !== 'granted'"
-          @click="testNotification"
-        >
+        <el-button :disabled="notificationPermission !== 'granted'" @click="testNotification">
           <el-icon><Bell /></el-icon>
           发送测试通知
         </el-button>

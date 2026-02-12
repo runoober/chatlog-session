@@ -11,7 +11,7 @@ export default [
 
   {
     name: 'app/files-to-ignore',
-    ignores: ['**/dist/**', '**/node_modules/**', '**/dist-ssr/**', '**/coverage/**'],
+    ignores: ['**/dist/**', '**/node_modules/**', '**/dist-ssr/**', '**/coverage/**', 'public/**'],
   },
 
   ...pluginVue.configs['flat/recommended'],
@@ -30,11 +30,20 @@ export default [
       'vue/multi-word-component-names': 'off',
       'vue/require-default-prop': 'off',
       '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-empty-object-type': 'off',
+      '@typescript-eslint/ban-ts-comment': [
+        'error',
+        {
+          'ts-ignore': 'allow-with-description',
+          'ts-expect-error': 'allow-with-description',
+        },
+      ],
       '@typescript-eslint/no-unused-vars': [
         'error',
         {
           argsIgnorePattern: '^_',
           varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
         },
       ],
       'no-console': process.env.NODE_ENV === 'production' ? 'warn' : 'off',

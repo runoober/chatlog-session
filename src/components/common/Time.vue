@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { 
-  formatRelativeTime, 
-  formatMessageTime, 
+import {
+  formatRelativeTime,
+  formatMessageTime,
   formatSessionTime,
   formatFullDate,
   formatDate,
   formatDateTime,
-  formatTime
+  formatTime,
 } from '@/utils/date'
 
 interface Props {
@@ -22,20 +22,21 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   format: 'auto',
   tooltip: true,
-  tooltipFormat: 'full'
+  tooltipFormat: 'full',
 })
 
 // 格式化时间
 const formattedTime = computed(() => {
   if (!props.time) return ''
-  
+
   try {
     // 统一转换为 Date 对象
-    const date = typeof props.time === 'number' 
-      ? new Date(props.time < 10000000000 ? props.time * 1000 : props.time)
-      : typeof props.time === 'string'
-      ? new Date(props.time)
-      : props.time
+    const date =
+      typeof props.time === 'number'
+        ? new Date(props.time < 10000000000 ? props.time * 1000 : props.time)
+        : typeof props.time === 'string'
+          ? new Date(props.time)
+          : props.time
 
     switch (props.format) {
       case 'relative':
@@ -67,14 +68,15 @@ const formattedTime = computed(() => {
 // Tooltip 内容
 const tooltipContent = computed(() => {
   if (!props.tooltip || !props.time) return ''
-  
+
   try {
     // 统一转换为 Date 对象
-    const date = typeof props.time === 'number' 
-      ? new Date(props.time < 10000000000 ? props.time * 1000 : props.time)
-      : typeof props.time === 'string'
-      ? new Date(props.time)
-      : props.time
+    const date =
+      typeof props.time === 'number'
+        ? new Date(props.time < 10000000000 ? props.time * 1000 : props.time)
+        : typeof props.time === 'string'
+          ? new Date(props.time)
+          : props.time
 
     switch (props.tooltipFormat) {
       case 'full':
@@ -86,7 +88,7 @@ const tooltipContent = computed(() => {
       default:
         return formatFullDate(date)
     }
-  } catch (error) {
+  } catch (_error) {
     return ''
   }
 })
@@ -95,22 +97,18 @@ const tooltipContent = computed(() => {
 const displayText = computed(() => {
   const text = formattedTime.value
   if (!text) return ''
-  
+
   let result = text
   if (props.prefix) result = props.prefix + result
   if (props.suffix) result = result + props.suffix
-  
+
   return result
 })
 </script>
 
 <template>
   <span class="time-display">
-    <el-tooltip
-      v-if="tooltip && tooltipContent"
-      :content="tooltipContent"
-      placement="top"
-    >
+    <el-tooltip v-if="tooltip && tooltipContent" :content="tooltipContent" placement="top">
       <span class="time-text">
         <slot :time="formattedTime">{{ displayText }}</slot>
       </span>
@@ -124,7 +122,7 @@ const displayText = computed(() => {
 <style lang="scss" scoped>
 .time-display {
   display: inline-block;
-  
+
   .time-text {
     font-size: inherit;
     color: inherit;
