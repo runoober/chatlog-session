@@ -20,13 +20,14 @@ export function useContactAutoLoad() {
         console.log('📦 数据库为空，自动启动后台加载联系人...')
 
         // 启动后台加载
-        contactStore.loadContactsInBackground({
-          batchSize: 500,
-          batchDelay: 100,
-          useCache: true
-        }).catch(err => {
-          console.error('自动后台加载联系人失败:', err)
-        })
+        contactStore
+          .loadContactsInBackground({
+            batchSize: 500,
+            batchDelay: 100,
+          })
+          .catch(err => {
+            console.error('自动后台加载联系人失败:', err)
+          })
       } else if (contactCount > 0) {
         console.log(`📦 数据库已有 ${contactCount} 个联系人，无需自动加载`)
       }
@@ -38,11 +39,7 @@ export function useContactAutoLoad() {
   /**
    * 手动启动联系人加载
    */
-  const startContactLoading = async (options?: {
-    batchSize?: number
-    batchDelay?: number
-    useCache?: boolean
-  }) => {
+  const startContactLoading = async (options?: { batchSize?: number; batchDelay?: number }) => {
     try {
       const { db } = await import('@/utils/db')
       const contactCount = await db.getContactCount()
@@ -53,7 +50,6 @@ export function useContactAutoLoad() {
         await contactStore.loadContactsInBackground({
           batchSize: options?.batchSize || 500,
           batchDelay: options?.batchDelay || 100,
-          useCache: options?.useCache ?? true
         })
 
         return true
@@ -80,7 +76,7 @@ export function useContactAutoLoad() {
         contactCount,
         isBackgroundLoading: loadingStatus,
         hasContacts: contactCount > 0,
-        needsLoading: contactCount === 0 && !loadingStatus
+        needsLoading: contactCount === 0 && !loadingStatus,
       }
     } catch (err) {
       console.error('检查联系人加载状态失败:', err)

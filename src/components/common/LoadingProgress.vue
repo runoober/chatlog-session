@@ -1,9 +1,18 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { LoadProgress } from '@/utils/background-loader'
 
 interface Props {
-  progress: LoadProgress | null
+  progress: {
+    loaded: number
+    total?: number
+    percentage: number
+    completed?: boolean
+    itemsPerSecond?: number
+    elapsedTime?: number
+    estimatedTimeRemaining?: number
+    currentBatch?: number
+    totalBatches?: number
+  } | null
   visible?: boolean
   position?: 'top' | 'bottom' | 'fixed'
   showDetails?: boolean
@@ -12,7 +21,7 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   visible: true,
   position: 'bottom',
-  showDetails: false
+  showDetails: false,
 })
 
 // 格式化时间
@@ -28,8 +37,8 @@ const formatTime = (ms?: number) => {
 }
 
 // 格式化速度
-const formatSpeed = (itemsPerSecond: number) => {
-  if (itemsPerSecond < 1) return '<1 项/秒'
+const formatSpeed = (itemsPerSecond?: number) => {
+  if (!itemsPerSecond || itemsPerSecond < 1) return '<1 项/秒'
   return `${Math.round(itemsPerSecond)} 项/秒`
 }
 
@@ -88,10 +97,7 @@ const shouldShow = computed(() => {
     <div
       v-if="shouldShow"
       class="loading-progress"
-      :class="[
-        `loading-progress--${position}`,
-        { 'loading-progress--detailed': showDetails }
-      ]"
+      :class="[`loading-progress--${position}`, { 'loading-progress--detailed': showDetails }]"
     >
       <div class="loading-progress__container">
         <!-- 状态栏 -->
@@ -115,7 +121,7 @@ const shouldShow = computed(() => {
             :class="{ 'loading-progress__fill--indeterminate': isIndeterminate }"
             :style="{
               width: progressWidth,
-              backgroundColor: progressColor
+              backgroundColor: progressColor,
             }"
           />
         </div>
@@ -209,7 +215,9 @@ const shouldShow = computed(() => {
 
   &__fill {
     height: 100%;
-    transition: width 0.3s ease, background-color 0.3s ease;
+    transition:
+      width 0.3s ease,
+      background-color 0.3s ease;
     border-radius: 2px;
 
     // 不确定模式动画

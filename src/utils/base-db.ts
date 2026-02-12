@@ -58,7 +58,7 @@ export abstract class BaseDatabase {
         resolve(this.db)
       }
 
-      request.onupgradeneeded = (event) => {
+      request.onupgradeneeded = event => {
         const db = (event.target as IDBOpenDBRequest).result
         const oldVersion = event.oldVersion
 
@@ -68,7 +68,7 @@ export abstract class BaseDatabase {
         config.stores.forEach(storeConfig => {
           if (!db.objectStoreNames.contains(storeConfig.name)) {
             const objectStoreParams: IDBObjectStoreParameters = {
-              keyPath: storeConfig.keyPath
+              keyPath: storeConfig.keyPath,
             }
 
             if (storeConfig.autoIncrement !== undefined) {
@@ -81,7 +81,7 @@ export abstract class BaseDatabase {
             if (storeConfig.indexes) {
               storeConfig.indexes.forEach(index => {
                 store.createIndex(index.name, index.keyPath, {
-                  unique: index.unique || false
+                  unique: index.unique || false,
                 })
               })
             }
@@ -127,10 +127,7 @@ export abstract class BaseDatabase {
   /**
    * 通用保存方法（添加或更新）
    */
-  protected async save<T = any>(
-    storeName: string,
-    data: T
-  ): Promise<number | string> {
+  protected async save<T = any>(storeName: string, data: T): Promise<number | string> {
     try {
       const db = await this.getDB()
 
@@ -164,50 +161,125 @@ export abstract class BaseDatabase {
 
   /**
    * 通用批量保存方法
-   */
-  protected async saveMany<T>(
-    storeName: string,
-    items: T[]
-  ): Promise<void> {
-    const db = await this.getDB()
+   *
+   * 使用单个事务写入所有数据，通过 transaction.oncomplete 确认持久化完成。
+  /** 每个事务的最大写入条数 */
+  private static readonly CHUNK_SIZE = 2000
 
+  /**
+   * 在单个事务中写入一批数据（内部辅助方法）
+   * 使用 relaxed durability 跳过 fsync，适用于可重建的缓存数据
+   */
+  private writeChunk<T>(db: IDBDatabase, storeName: string, items: T[]): Promise<void> {
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction([storeName], 'readwrite')
+      const transaction = db.transaction([storeName], 'readwrite', { durability: 'relaxed' })
       const store = transaction.objectStore(storeName)
 
-      let completed = 0
-      const total = items.length
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => {
+        console.error(`❌ 批量保存失败 [${storeName}]:`, transaction.error)
+        reject(transaction.error)
+      }
+      transaction.onabort = () => {
+        console.error(`❌ 批量保存事务中止 [${storeName}]:`, transaction.error)
+        reject(transaction.error || new Error('Transaction aborted'))
+      }
 
-      items.forEach(item => {
-        const request = store.put(item)
-
-        request.onsuccess = () => {
-          completed++
-          if (completed === total) {
-            resolve()
-          }
-        }
-
-        request.onerror = () => {
-          console.error(`❌ 批量保存失败 [${storeName}]:`, request.error)
-          reject(request.error)
-        }
-      })
-
-      // 处理空数组情况
-      if (total === 0) {
-        resolve()
+      for (const item of items) {
+        store.put(item as any)
       }
     })
   }
 
   /**
+   * 通用批量保存方法
+   *
+   * 将数据分块写入（每块 CHUNK_SIZE 条），避免单事务提交时刷盘数据量过大。
+   */
+  protected async saveMany<T>(storeName: string, items: T[]): Promise<void> {
+    if (items.length === 0) return
+
+    const t0 = performance.now()
+    const chunkSize = BaseDatabase.CHUNK_SIZE
+    const totalChunks = Math.ceil(items.length / chunkSize)
+    console.log(`⏱️ [saveMany] 开始写入 ${items.length} 条到 [${storeName}]，分 ${totalChunks} 块`)
+
+    const db = await this.getDB()
+
+    for (let i = 0; i < totalChunks; i++) {
+      const tChunk = performance.now()
+      const chunk = items.slice(i * chunkSize, (i + 1) * chunkSize)
+      await this.writeChunk(db, storeName, chunk)
+      console.log(
+        `⏱️ [saveMany] 块 ${i + 1}/${totalChunks} 完成（${chunk.length} 条），耗时: ${(performance.now() - tChunk).toFixed(1)}ms`
+      )
+    }
+
+    console.log(
+      `⏱️ [saveMany] 全部完成，总耗时: ${(performance.now() - t0).toFixed(1)}ms (${items.length} 条)`
+    )
+  }
+
+  /**
+   * 清空对象存储并分块批量写入新数据
+   *
+   * 第一个事务负责 clear + 写入第一块，后续事务只写入。
+   * 分块可以显著减少单次事务提交的刷盘数据量。
+   */
+  protected async clearAndSaveMany<T>(storeName: string, items: T[]): Promise<void> {
+    const t0 = performance.now()
+    const chunkSize = BaseDatabase.CHUNK_SIZE
+    const totalChunks = Math.ceil(items.length / chunkSize)
+    console.log(
+      `⏱️ [clearAndSaveMany] 开始清空并写入 ${items.length} 条到 [${storeName}]，分 ${totalChunks} 块`
+    )
+
+    const db = await this.getDB()
+
+    // 第一个事务：clear + 写入第一块
+    await new Promise<void>((resolve, reject) => {
+      const firstChunk = items.slice(0, chunkSize)
+      const transaction = db.transaction([storeName], 'readwrite', { durability: 'relaxed' })
+      const store = transaction.objectStore(storeName)
+
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => {
+        console.error(`❌ 清空并保存失败 [${storeName}]:`, transaction.error)
+        reject(transaction.error)
+      }
+      transaction.onabort = () => {
+        console.error(`❌ 清空并保存事务中止 [${storeName}]:`, transaction.error)
+        reject(transaction.error || new Error('Transaction aborted'))
+      }
+
+      store.clear()
+      for (const item of firstChunk) {
+        store.put(item as any)
+      }
+    })
+    console.log(
+      `⏱️ [clearAndSaveMany] 块 1/${totalChunks} 完成（含 clear），耗时: ${(performance.now() - t0).toFixed(1)}ms`
+    )
+
+    // 后续事务
+    for (let i = 1; i < totalChunks; i++) {
+      const tChunk = performance.now()
+      const chunk = items.slice(i * chunkSize, (i + 1) * chunkSize)
+      await this.writeChunk(db, storeName, chunk)
+      console.log(
+        `⏱️ [clearAndSaveMany] 块 ${i + 1}/${totalChunks} 完成（${chunk.length} 条），耗时: ${(performance.now() - tChunk).toFixed(1)}ms`
+      )
+    }
+
+    console.log(
+      `⏱️ [clearAndSaveMany] 全部完成，总耗时: ${(performance.now() - t0).toFixed(1)}ms (${items.length} 条)`
+    )
+  }
+
+  /**
    * 通用获取方法（按主键）
    */
-  protected async get<T>(
-    storeName: string,
-    key: number | string
-  ): Promise<T | null> {
+  protected async get<T>(storeName: string, key: number | string): Promise<T | null> {
     const db = await this.getDB()
 
     return new Promise((resolve, reject) => {
@@ -230,7 +302,12 @@ export abstract class BaseDatabase {
    * 通用获取所有方法
    */
   protected async getAll<T>(storeName: string): Promise<T[]> {
+    const t0 = performance.now()
+    console.log(`⏱️ [getAll] 开始从 [${storeName}] 读取全部数据`)
+
     const db = await this.getDB()
+    const t1 = performance.now()
+    console.log(`⏱️ [getAll] getDB 耗时: ${(t1 - t0).toFixed(1)}ms`)
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([storeName], 'readonly')
@@ -238,7 +315,16 @@ export abstract class BaseDatabase {
       const request = store.getAll()
 
       request.onsuccess = () => {
+        const t2 = performance.now()
+        const count = request.result?.length || 0
+        console.log(
+          `⏱️ [getAll] onsuccess 回调触发，${count} 条数据，耗时: ${(t2 - t1).toFixed(1)}ms`
+        )
         resolve(request.result || [])
+        const t3 = performance.now()
+        console.log(
+          `⏱️ [getAll] resolve 后耗时: ${(t3 - t2).toFixed(1)}ms，总耗时: ${(t3 - t0).toFixed(1)}ms`
+        )
       }
 
       request.onerror = () => {
@@ -251,11 +337,7 @@ export abstract class BaseDatabase {
   /**
    * 通用按索引查询方法
    */
-  protected async getByIndex<T>(
-    storeName: string,
-    indexName: string,
-    value: any
-  ): Promise<T[]> {
+  protected async getByIndex<T>(storeName: string, indexName: string, value: any): Promise<T[]> {
     const db = await this.getDB()
 
     return new Promise((resolve, reject) => {
@@ -313,10 +395,7 @@ export abstract class BaseDatabase {
   /**
    * 通用删除方法
    */
-  protected async delete(
-    storeName: string,
-    key: number | string
-  ): Promise<void> {
+  protected async delete(storeName: string, key: number | string): Promise<void> {
     const db = await this.getDB()
 
     return new Promise((resolve, reject) => {
@@ -337,39 +416,30 @@ export abstract class BaseDatabase {
 
   /**
    * 通用批量删除方法
+   *
+   * 使用单个事务删除所有数据，通过 transaction.oncomplete 确认完成。
    */
-  protected async deleteMany(
-    storeName: string,
-    keys: (number | string)[]
-  ): Promise<void> {
+  protected async deleteMany(storeName: string, keys: (number | string)[]): Promise<void> {
+    if (keys.length === 0) return
+
     const db = await this.getDB()
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([storeName], 'readwrite')
       const store = transaction.objectStore(storeName)
 
-      let completed = 0
-      const total = keys.length
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => {
+        console.error(`❌ 批量删除失败 [${storeName}]:`, transaction.error)
+        reject(transaction.error)
+      }
+      transaction.onabort = () => {
+        console.error(`❌ 批量删除事务中止 [${storeName}]:`, transaction.error)
+        reject(transaction.error || new Error('Transaction aborted'))
+      }
 
-      keys.forEach(key => {
-        const request = store.delete(key)
-
-        request.onsuccess = () => {
-          completed++
-          if (completed === total) {
-            resolve()
-          }
-        }
-
-        request.onerror = () => {
-          console.error(`❌ 批量删除失败 [${storeName}]:`, request.error)
-          reject(request.error)
-        }
-      })
-
-      // 处理空数组情况
-      if (total === 0) {
-        resolve()
+      for (const key of keys) {
+        store.delete(key)
       }
     })
   }

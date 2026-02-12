@@ -42,7 +42,7 @@ const flattenedContacts = computed(() => {
     return filteredContacts.value.map(contact => ({
       type: 'item' as const,
       key: contact.wxid,
-      data: contact
+      data: contact,
     }))
   }
   return flattenGroups(contactGroups.value)
@@ -129,7 +129,6 @@ const startBackgroundRefresh = async () => {
     await contactStore.loadContactsInBackground({
       batchSize: 500,
       batchDelay: 100,
-      useCache: false
     })
     ElMessage.success(`后台刷新完成，已加载 ${contactStore.contacts.length} 个联系人`)
   } catch (err) {
@@ -142,7 +141,7 @@ const startBackgroundRefresh = async () => {
 const loadContacts = async () => {
   try {
     await contactStore.loadContacts()
-    
+
     // 如果数据库为空，自动触发后台加载
     if (contactStore.contacts.length === 0) {
       console.log('数据库为空，自动触发后台加载')
@@ -236,19 +235,15 @@ onMounted(() => {
 
           <!-- 筛选和排序 -->
           <div class="contact-filters">
-            <el-radio-group :model-value="contactStore.filterType" size="small" @change="handleFilterChange">
-              <el-radio-button label="friend">
-                好友 ({{ stats.friends }})
-              </el-radio-button>
-              <el-radio-button label="chatroom">
-                群聊 ({{ stats.chatrooms }})
-              </el-radio-button>
-              <el-radio-button label="official">
-                公众号 ({{ stats.official }})
-              </el-radio-button>
-              <el-radio-button label="all">
-                全部 ({{ stats.total }})
-              </el-radio-button>
+            <el-radio-group
+              :model-value="contactStore.filterType"
+              size="small"
+              @change="handleFilterChange"
+            >
+              <el-radio-button label="friend"> 好友 ({{ stats.friends }}) </el-radio-button>
+              <el-radio-button label="chatroom"> 群聊 ({{ stats.chatrooms }}) </el-radio-button>
+              <el-radio-button label="official"> 公众号 ({{ stats.official }}) </el-radio-button>
+              <el-radio-button label="all"> 全部 ({{ stats.total }}) </el-radio-button>
             </el-radio-group>
 
             <el-button-group size="small" class="sort-buttons">
@@ -343,11 +338,7 @@ onMounted(() => {
               </div>
 
               <!-- 联系人项 -->
-              <div
-                v-else
-                class="contact-item"
-                @click="viewContact(item.data!)"
-              >
+              <div v-else class="contact-item" @click="viewContact(item.data!)">
                 <Avatar
                   :src="item.data!.avatar"
                   :name="item.data!.nickname"
@@ -376,12 +367,7 @@ onMounted(() => {
                 </div>
 
                 <div class="contact-actions">
-                  <el-button
-                    text
-                    type="primary"
-                    size="small"
-                    @click.stop="startChat(item.data!)"
-                  >
+                  <el-button text type="primary" size="small" @click.stop="startChat(item.data!)">
                     <el-icon><ChatDotRound /></el-icon>
                     发消息
                   </el-button>
@@ -391,7 +377,10 @@ onMounted(() => {
           </RecycleScroller>
 
           <!-- 字母索引 -->
-          <div v-if="letterIndexList.length > 0 && contactStore.sortBy === 'pinyin'" class="letter-index">
+          <div
+            v-if="letterIndexList.length > 0 && contactStore.sortBy === 'pinyin'"
+            class="letter-index"
+          >
             <div
               v-for="index in letterIndexList"
               :key="index.key"
@@ -399,7 +388,7 @@ onMounted(() => {
               :class="{
                 disabled: !index.enabled,
                 starred: index.type === 'starred',
-                special: index.type === 'special'
+                special: index.type === 'special',
               }"
               @click="index.enabled && jumpToLetter(index.key)"
             >

@@ -2,13 +2,13 @@
  * 联系人状态管理
  */
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, shallowRef, triggerRef, computed } from 'vue'
 import { contactAPI, getAvatarUrl } from '@/api/contact'
 import type { Contact } from '@/types/contact'
 import type { ContactFilterType } from '@/types'
 import { useAppStore } from './app'
 import { db } from '@/utils/db'
-import { createBackgroundLoader, type BackgroundLoader, type LoadProgress } from '@/utils/background-loader'
+
 import { groupAndSortContacts, generateIndexList, filterContacts } from '@/utils/contact-grouping'
 
 export const useContactStore = defineStore('contact', () => {
@@ -18,8 +18,10 @@ export const useContactStore = defineStore('contact', () => {
 
   /**
    * 联系人列表
+   * 使用 shallowRef 避免对 20000+ 联系人对象做深层响应式代理
+   * 修改数组内容后需调用 triggerRef(contacts) 触发更新
    */
-  const contacts = ref<Contact[]>([])
+  const contacts = shallowRef<Contact[]>([])
 
   /**
    * 当前选中的联系人 ID
@@ -62,14 +64,13 @@ export const useContactStore = defineStore('contact', () => {
   const error = ref<Error | null>(null)
 
   /**
-   * 后台加载器
-   */
-  let backgroundLoader: BackgroundLoader<Contact> | null = null
-
-  /**
    * 后台加载进度
    */
-  const loadProgress = ref<LoadProgress | null>(null)
+  const loadProgress = ref<{
+    loaded: number
+    total: number
+    percentage: number
+  } | null>(null)
 
   /**
    * 是否正在后台加载
@@ -194,18 +195,33 @@ export const useContactStore = defineStore('contact', () => {
       error.value = null
       appStore.setLoading('contacts', true)
 
+      const t0 = performance.now()
+      console.log('⏱️ [loadContacts] 开始加载')
+
       // 先尝试从缓存加载
       const cachedCount = await db.getContactCount()
+      console.log(
+        `⏱️ [loadContacts] getContactCount: ${cachedCount}，耗时: ${(performance.now() - t0).toFixed(1)}ms`
+      )
+
       if (cachedCount > 0 && !keyword) {
+        const t1 = performance.now()
         const cached = await db.getAllContacts()
+        const t2 = performance.now()
+        console.log(
+          `⏱️ [loadContacts] db.getAllContacts 返回 ${cached.length} 条，耗时: ${(t2 - t1).toFixed(1)}ms`
+        )
+
         contacts.value = cached
+        const t3 = performance.now()
+        console.log(`⏱️ [loadContacts] 赋值 contacts.value 耗时: ${(t3 - t2).toFixed(1)}ms`)
+
         totalContacts.value = cached.length
 
         if (appStore.isDebug) {
           console.log('📦 从缓存加载联系人', { count: cached.length })
         }
-      }else{
-
+      } else {
         // 从 API 加载
         const result = await contactAPI.getContacts(keyword ? { keyword } : undefined)
         contacts.value = result
@@ -218,6 +234,9 @@ export const useContactStore = defineStore('contact', () => {
           })
         }
       }
+
+      console.log(`⏱️ [loadContacts] 全部完成，总耗时: ${(performance.now() - t0).toFixed(1)}ms`)
+
       if (appStore.isDebug) {
         console.log('👥 Contacts loaded', {
           count: totalContacts.value,
@@ -248,114 +267,169 @@ export const useContactStore = defineStore('contact', () => {
   }
 
   /**
-   * 后台逐步加载联系人（分批加载，不阻塞 UI）
+   * 取消标志，用于中断加载过程
    */
-  async function loadContactsInBackground(options?: {
-    batchSize?: number
-    batchDelay?: number
-    useCache?: boolean
-  }) {
-    // 如果已经在后台加载，先停止
-    if (backgroundLoader) {
-      backgroundLoader.cancel()
+  let isCancelled = false
+
+  /**
+   * 后台批量加载联系人
+   *
+   * 采用"临时数组 + 延迟更新"策略优化性能：
+   * 1. 分批从 API 加载数据，直接 append 到非响应式的临时数组
+   * 2. 加载过程中只更新进度状态，不触发联系人列表的 Vue 响应式更新
+   * 3. 全部加载完成后，清空 IndexedDB 并一次性全量保存
+   * 4. 最后一次性赋值给 contacts.value，只触发一次界面重渲染
+   *
+   * @param options.batchSize 每批次加载数量，默认 500
+   * @param options.batchDelay 批次间延迟（毫秒），默认 100，避免阻塞 UI
+   */
+  async function loadContactsInBackground(options?: { batchSize?: number; batchDelay?: number }) {
+    const tTotal = performance.now()
+    console.log('⏱️ [loadContactsInBackground] 开始')
+
+    // 如果已经在后台加载，先取消
+    if (isBackgroundLoading.value) {
+      isCancelled = true
     }
 
     const batchSize = options?.batchSize || 500
     const batchDelay = options?.batchDelay || 100
-    const useCache = options?.useCache ?? true
 
-    // 先从缓存快速加载（如果启用）
-    if (useCache) {
-      const cached = await db.getAllContacts().catch(() => [])
-      if (cached.length > 0) {
-        contacts.value = cached
-        totalContacts.value = cached.length
+    // 重置取消标志
+    isCancelled = false
 
-        if (appStore.isDebug) {
-          console.log('📦 从缓存快速加载联系人', { count: cached.length })
-        }
-      }
-    }
+    // 临时数组，用于存储加载过程中的数据（不触发响应式更新）
+    const tempContacts: Contact[] = []
 
-    // 创建后台加载器
-    backgroundLoader = createBackgroundLoader<Contact>({
-      batchSize,
-      batchDelay,
-      useIdleCallback: true,
-      loadFn: async (offset, limit) => {
+    try {
+      isBackgroundLoading.value = true
+      error.value = null
+
+      // 批量加载所有数据
+      let offset = 0
+      let hasMore = true
+      let totalEstimate = 0
+      let batchIndex = 0
+
+      const tApiFetch = performance.now()
+      while (hasMore && !isCancelled) {
         // 调用 API 分页加载
-        const result = await contactAPI.getContacts({
-          limit,
-          offset
+        const tBatch = performance.now()
+        const batch = await contactAPI.getContacts({
+          limit: batchSize,
+          offset,
         })
-        return result
-      },
-      onBatchLoaded: async (batch, progress) => {
-        // 合并到现有列表（去重）
-        const existingIds = new Set(contacts.value.map(c => c.wxid))
-        const newContacts = batch.filter(c => !existingIds.has(c.wxid))
+        console.log(
+          `⏱️ [loadContactsInBackground] API 批次 #${batchIndex} (offset=${offset}, limit=${batchSize}) 返回 ${batch.length} 条，耗时: ${(performance.now() - tBatch).toFixed(1)}ms`
+        )
 
-        if (newContacts.length > 0) {
-          contacts.value = [...contacts.value, ...newContacts]
-          totalContacts.value = contacts.value.length
-
-          // 保存到缓存（会自动计算索引）
-          await db.saveContacts(newContacts).catch(err => {
-            console.error('保存批次到缓存失败:', err)
-          })
+        if (batch.length === 0) {
+          hasMore = false
+          break
         }
 
-        // 更新进度
+        // 直接 append 到临时数组（不做对比合并）
+        tempContacts.push(...batch)
+
+        // 更新偏移量
+        offset += batch.length
+        batchIndex++
+
+        // 如果是第一批次，估算总数
+        if (offset === batch.length) {
+          totalEstimate = Math.max(batch.length * 2, 1000)
+        }
+
+        // 更新进度（只更新进度状态，不更新数据）
+        const progress = {
+          loaded: tempContacts.length,
+          total: Math.max(totalEstimate, tempContacts.length + batchSize),
+          percentage: 0,
+        }
+        progress.percentage = Math.min(99, (progress.loaded / progress.total) * 100)
         loadProgress.value = progress
 
         if (appStore.isDebug) {
           console.log('📥 后台加载批次', {
             batchSize: batch.length,
-            loaded: progress.loaded,
+            loaded: tempContacts.length,
             percentage: progress.percentage.toFixed(1) + '%',
           })
         }
-      },
-      onCompleted: (items) => {
-        isBackgroundLoading.value = false
-        loadProgress.value = null
-        console.log(`后台加载完成，共 ${items.length} 个联系人`)
-      },
-      onError: (err) => {
-        isBackgroundLoading.value = false
-        error.value = err
-        console.error('后台加载失败:', err)
-      },
-      onProgress: (progress) => {
-        loadProgress.value = progress
+
+        // 检查是否还有更多数据
+        if (batch.length < batchSize) {
+          hasMore = false
+        }
+
+        // 批次间延迟（避免阻塞 UI）
+        if (hasMore && batchDelay > 0) {
+          await new Promise(resolve => setTimeout(resolve, batchDelay))
+        }
       }
-    })
+      console.log(
+        `⏱️ [loadContactsInBackground] API 全部批次完成，共 ${tempContacts.length} 条，${batchIndex} 批，耗时: ${(performance.now() - tApiFetch).toFixed(1)}ms`
+      )
 
-    try {
-      isBackgroundLoading.value = true
-      await backgroundLoader.start()
+      // 如果被取消，直接返回
+      if (isCancelled) {
+        throw new Error('加载已取消')
+      }
+
+      // 一次性全量更新：清空 db + 保存（单事务） → 更新 reactive state
+      if (tempContacts.length > 0) {
+        // 在单个 IndexedDB 事务中完成清空和全量保存，减少事务开销
+        const tDbWrite = performance.now()
+        console.log(
+          `⏱️ [loadContactsInBackground] 开始 clearAndSaveContacts，数据量: ${tempContacts.length}`
+        )
+        await db.clearAndSaveContacts(tempContacts)
+        console.log(
+          `⏱️ [loadContactsInBackground] clearAndSaveContacts 完成，耗时: ${(performance.now() - tDbWrite).toFixed(1)}ms`
+        )
+        if (appStore.isDebug) {
+          console.log('💾 已全量保存到数据库（单事务）', { count: tempContacts.length })
+        }
+
+        // 原子性更新 reactive state（只触发一次响应式更新）
+        const tReactive = performance.now()
+        contacts.value = tempContacts
+        totalContacts.value = tempContacts.length
+        console.log(
+          `⏱️ [loadContactsInBackground] 赋值 contacts.value 耗时: ${(performance.now() - tReactive).toFixed(1)}ms`
+        )
+
+        if (appStore.isDebug) {
+          console.log('✅ 后台加载完成，已全量更新', { count: tempContacts.length })
+        }
+      }
+
+      // 完成
+      loadProgress.value = {
+        loaded: tempContacts.length,
+        total: tempContacts.length,
+        percentage: 100,
+      }
+
+      console.log(
+        `⏱️ [loadContactsInBackground] 全部完成，总耗时: ${(performance.now() - tTotal).toFixed(1)}ms`
+      )
     } catch (err) {
-      isBackgroundLoading.value = false
-      console.error('后台加载联系人失败:', err)
+      // 错误处理：清空临时数据，保持数据库为空
+      tempContacts.length = 0
+      if (!isCancelled) {
+        error.value = err as Error
+        console.error('后台加载失败:', err)
+      }
       throw err
-    }
-  }
-
-  /**
-   * 暂停后台加载
-   */
-  function pauseBackgroundLoading() {
-    if (backgroundLoader) {
-      backgroundLoader.pause()
-    }
-  }
-
-  /**
-   * 恢复后台加载
-   */
-  function resumeBackgroundLoading() {
-    if (backgroundLoader) {
-      backgroundLoader.resume()
+    } finally {
+      isBackgroundLoading.value = false
+      // 延迟清空进度（让用户看到 100%）
+      setTimeout(() => {
+        if (!isBackgroundLoading.value) {
+          loadProgress.value = null
+        }
+      }, 500)
     }
   }
 
@@ -363,10 +437,11 @@ export const useContactStore = defineStore('contact', () => {
    * 取消后台加载
    */
   function cancelBackgroundLoading() {
-    if (backgroundLoader) {
-      backgroundLoader.cancel()
-      isBackgroundLoading.value = false
-      loadProgress.value = null
+    isCancelled = true
+    isBackgroundLoading.value = false
+    loadProgress.value = null
+    if (appStore.isDebug) {
+      console.log('🛑 已取消后台加载')
     }
   }
 
@@ -419,6 +494,7 @@ export const useContactStore = defineStore('contact', () => {
         } else {
           contacts.value.push(cached)
         }
+        triggerRef(contacts)
       }
 
       // 从 API 获取最新数据
@@ -431,6 +507,7 @@ export const useContactStore = defineStore('contact', () => {
       } else {
         contacts.value.push(contact)
       }
+      triggerRef(contacts)
 
       // 保存到缓存
       await db.saveContact(contact).catch(err => {
@@ -514,6 +591,7 @@ export const useContactStore = defineStore('contact', () => {
     const contact = contacts.value.find(c => c.wxid === wxid)
     if (contact) {
       contact.isStarred = true
+      triggerRef(contacts)
     }
   }
 
@@ -524,6 +602,7 @@ export const useContactStore = defineStore('contact', () => {
     const contact = contacts.value.find(c => c.wxid === wxid)
     if (contact) {
       contact.isStarred = false
+      triggerRef(contacts)
     }
   }
 
@@ -534,6 +613,7 @@ export const useContactStore = defineStore('contact', () => {
     const contact = contacts.value.find(c => c.wxid === wxid)
     if (contact) {
       contact.isStarred = !contact.isStarred
+      triggerRef(contacts)
     }
   }
 
@@ -544,6 +624,7 @@ export const useContactStore = defineStore('contact', () => {
     const contact = contacts.value.find(c => c.wxid === wxid)
     if (contact) {
       Object.assign(contact, updates)
+      triggerRef(contacts)
     }
   }
 
@@ -554,6 +635,7 @@ export const useContactStore = defineStore('contact', () => {
     const index = contacts.value.findIndex(c => c.wxid === wxid)
     if (index !== -1) {
       contacts.value.splice(index, 1)
+      triggerRef(contacts)
     }
 
     // 如果删除的是当前联系人，清除选择
@@ -573,6 +655,7 @@ export const useContactStore = defineStore('contact', () => {
     if (uniqueContacts.length > 0) {
       contacts.value.push(...uniqueContacts)
       totalContacts.value = contacts.value.length
+      triggerRef(contacts)
     }
 
     return uniqueContacts.length
@@ -665,11 +748,11 @@ export const useContactStore = defineStore('contact', () => {
       loading.value = true
 
       // 先从缓存获取
-      const cachedMap = await db.getBatchContacts(wxids).catch(() => new Map())
       const needFetch: string[] = []
+      let changed = false
 
-      wxids.forEach(wxid => {
-        const cached = cachedMap.get(wxid)
+      for (const wxid of wxids) {
+        const cached = await db.getContact(wxid).catch(() => null)
         if (cached) {
           // 合并缓存数据到内存
           const index = contacts.value.findIndex(c => c.wxid === wxid)
@@ -678,10 +761,11 @@ export const useContactStore = defineStore('contact', () => {
           } else {
             contacts.value.push(cached)
           }
+          changed = true
         } else {
           needFetch.push(wxid)
         }
-      })
+      }
 
       // 从 API 获取未缓存的数据
       let result: Contact[] = []
@@ -697,6 +781,7 @@ export const useContactStore = defineStore('contact', () => {
             contacts.value.push(contact)
           }
         })
+        changed = true
 
         // 批量保存到缓存
         if (result.length > 0) {
@@ -704,6 +789,10 @@ export const useContactStore = defineStore('contact', () => {
             console.error('批量保存联系人到缓存失败:', err)
           })
         }
+      }
+
+      if (changed) {
+        triggerRef(contacts)
       }
 
       // 返回所有联系人（缓存 + 新获取）
@@ -850,8 +939,6 @@ export const useContactStore = defineStore('contact', () => {
     // Actions
     loadContacts,
     loadContactsInBackground,
-    pauseBackgroundLoading,
-    resumeBackgroundLoading,
     cancelBackgroundLoading,
     refreshContacts,
     loadFriends,
