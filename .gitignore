@@ -1,3 +1,9 @@
+
+openspec/changes/archive/
+openspec/
+
+.opencode/
+
 # Logs
 logs
 *.log
