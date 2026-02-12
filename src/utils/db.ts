@@ -26,6 +26,12 @@ interface WorkerResponse {
   id: string
   success: boolean
   error?: string
+  /** 消息类型：progress 表示中间进度报告，undefined 表示最终结果 */
+  type?: 'progress' | 'complete'
+  /** 当前已完成的块序号（从 1 开始） */
+  currentChunk?: number
+  /** 总块数 */
+  totalChunks?: number
 }
 
 /**
@@ -68,7 +74,14 @@ class Database extends BaseDatabase {
   private worker: Worker | null = null
   private workerReady = false
   private workerFailed = false
-  private pendingRequests = new Map<string, { resolve: () => void; reject: (err: Error) => void }>()
+  private pendingRequests = new Map<
+    string,
+    {
+      resolve: () => void
+      reject: (err: Error) => void
+      onProgress?: (currentChunk: number, totalChunks: number) => void
+    }
+  >()
   private requestCounter = 0
 
   /**
@@ -83,10 +96,19 @@ class Database extends BaseDatabase {
       this.worker = new Worker(new URL('./db-worker.ts', import.meta.url), { type: 'module' })
 
       this.worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
-        const { id, success, error } = event.data
+        const { id, success, error, type, currentChunk, totalChunks } = event.data
         const pending = this.pendingRequests.get(id)
         if (!pending) return
 
+        // 中间进度报告：调用回调但不 resolve
+        if (type === 'progress') {
+          if (pending.onProgress && currentChunk != null && totalChunks != null) {
+            pending.onProgress(currentChunk, totalChunks)
+          }
+          return
+        }
+
+        // 最终结果：resolve 或 reject
         this.pendingRequests.delete(id)
         if (success) {
           pending.resolve()
@@ -126,7 +148,8 @@ class Database extends BaseDatabase {
    */
   private sendToWorker(
     action: WorkerRequest['action'],
-    params: Omit<WorkerRequest, 'id' | 'action'> = {}
+    params: Omit<WorkerRequest, 'id' | 'action'> = {},
+    onProgress?: (currentChunk: number, totalChunks: number) => void
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       const worker = this.worker || this.getWorker()
@@ -136,7 +159,7 @@ class Database extends BaseDatabase {
       }
 
       const id = `req_${++this.requestCounter}`
-      this.pendingRequests.set(id, { resolve, reject })
+      this.pendingRequests.set(id, { resolve, reject, onProgress })
 
       const message: WorkerRequest = { id, action, ...params }
       const itemCount = params.items?.length || 0
@@ -157,7 +180,8 @@ class Database extends BaseDatabase {
   private async writeViaWorker(
     action: 'clearAndSaveMany' | 'saveMany' | 'clear',
     storeName: string,
-    items?: any[] // eslint-disable-line @typescript-eslint/no-explicit-any
+    items?: any[], // eslint-disable-line @typescript-eslint/no-explicit-any
+    onProgress?: (currentChunk: number, totalChunks: number) => void
   ): Promise<void> {
     const t0 = performance.now()
     const itemCount = items?.length || 0
@@ -179,11 +203,15 @@ class Database extends BaseDatabase {
 
         const tSend = performance.now()
         console.log(`⏱️ [writeViaWorker] 准备 postMessage 给 Worker，数据量: ${itemCount}`)
-        await this.sendToWorker(action, {
-          storeName,
-          items,
-          dbConfig: this.workerReady ? undefined : this.config,
-        })
+        await this.sendToWorker(
+          action,
+          {
+            storeName,
+            items,
+            dbConfig: this.workerReady ? undefined : this.config,
+          },
+          onProgress
+        )
         const tDone = performance.now()
         console.log(
           `⏱️ [writeViaWorker] Worker 完成 ${action}，Worker 耗时: ${(tDone - tSend).toFixed(1)}ms，总耗时: ${(tDone - t0).toFixed(1)}ms`
@@ -377,8 +405,14 @@ class Database extends BaseDatabase {
    *
    * 通过 Web Worker 在后台线程执行清空 + 批量写入，
    * 避免 20000+ 条记录的同步 put() 循环阻塞主线程。
+   *
+   * @param contacts 联系人数据
+   * @param onProgress 可选的进度回调，每个块写入完成后触发
    */
-  async clearAndSaveContacts(contacts: Contact[]): Promise<void> {
+  async clearAndSaveContacts(
+    contacts: Contact[],
+    onProgress?: (currentChunk: number, totalChunks: number) => void
+  ): Promise<void> {
     if (!contacts || contacts.length === 0) {
       await this.writeViaWorker('clear', CONTACT_STORE)
       return
@@ -386,7 +420,7 @@ class Database extends BaseDatabase {
 
     const t0 = performance.now()
     console.log(`⏱️ [db.clearAndSaveContacts] 开始，数据量: ${contacts.length}`)
-    await this.writeViaWorker('clearAndSaveMany', CONTACT_STORE, contacts)
+    await this.writeViaWorker('clearAndSaveMany', CONTACT_STORE, contacts, onProgress)
     console.log(`⏱️ [db.clearAndSaveContacts] 完成，耗时: ${(performance.now() - t0).toFixed(1)}ms`)
   }
 

@@ -70,6 +70,14 @@ export const useContactStore = defineStore('contact', () => {
     loaded: number
     total: number
     percentage: number
+    completed?: boolean
+    itemsPerSecond?: number
+    elapsedTime?: number
+    estimatedTimeRemaining?: number
+    currentBatch?: number
+    totalBatches?: number
+    /** 当前阶段：api=正在从 API 拉取, db=正在写入数据库 */
+    phase?: 'api' | 'db'
   } | null>(null)
 
   /**
@@ -305,11 +313,16 @@ export const useContactStore = defineStore('contact', () => {
       isBackgroundLoading.value = true
       error.value = null
 
+      // 获取基准总数，用于计算准确的百分比
+      const baselineTotal = totalContacts.value || (await db.getContactCount()) || 0
+      const startTime = performance.now()
+
       // 批量加载所有数据
       let offset = 0
       let hasMore = true
-      let totalEstimate = 0
       let batchIndex = 0
+      // API 阶段占总进度的 0~80%，DB 写入阶段占 80~100%
+      const API_PHASE_WEIGHT = 80
 
       const tApiFetch = performance.now()
       while (hasMore && !isCancelled) {
@@ -335,25 +348,57 @@ export const useContactStore = defineStore('contact', () => {
         offset += batch.length
         batchIndex++
 
-        // 如果是第一批次，估算总数
-        if (offset === batch.length) {
-          totalEstimate = Math.max(batch.length * 2, 1000)
+        // 计算进度详情
+        const elapsedTime = performance.now() - startTime
+        const elapsedSec = elapsedTime / 1000
+        const itemsPerSecond = elapsedSec > 0 ? tempContacts.length / elapsedSec : 0
+
+        // 百分比计算：如果有基准总数，按比例计算；否则用动态估算
+        let apiPercentage: number
+        let estimatedTotal: number
+        if (baselineTotal > 0) {
+          apiPercentage = Math.min(
+            API_PHASE_WEIGHT,
+            (tempContacts.length / baselineTotal) * API_PHASE_WEIGHT
+          )
+          estimatedTotal = baselineTotal
+        } else {
+          // 无基准时的动态估算
+          estimatedTotal =
+            batch.length < batchSize
+              ? tempContacts.length
+              : Math.max(tempContacts.length * 1.5, tempContacts.length + batchSize)
+          apiPercentage = Math.min(
+            API_PHASE_WEIGHT - 1,
+            (tempContacts.length / estimatedTotal) * API_PHASE_WEIGHT
+          )
         }
 
-        // 更新进度（只更新进度状态，不更新数据）
-        const progress = {
+        // 预计剩余时间
+        const remainingItems = Math.max(0, estimatedTotal - tempContacts.length)
+        const estimatedTimeRemaining =
+          itemsPerSecond > 0 ? (remainingItems / itemsPerSecond) * 1000 : undefined
+
+        // 估算总批次数
+        const estimatedTotalBatches = Math.ceil(estimatedTotal / batchSize)
+
+        loadProgress.value = {
           loaded: tempContacts.length,
-          total: Math.max(totalEstimate, tempContacts.length + batchSize),
-          percentage: 0,
+          total: estimatedTotal,
+          percentage: apiPercentage,
+          itemsPerSecond,
+          elapsedTime,
+          estimatedTimeRemaining,
+          currentBatch: batchIndex,
+          totalBatches: estimatedTotalBatches,
+          phase: 'api',
         }
-        progress.percentage = Math.min(99, (progress.loaded / progress.total) * 100)
-        loadProgress.value = progress
 
         if (appStore.isDebug) {
           console.log('📥 后台加载批次', {
             batchSize: batch.length,
             loaded: tempContacts.length,
-            percentage: progress.percentage.toFixed(1) + '%',
+            percentage: apiPercentage.toFixed(1) + '%',
           })
         }
 
@@ -378,12 +423,38 @@ export const useContactStore = defineStore('contact', () => {
 
       // 一次性全量更新：清空 db + 保存（单事务） → 更新 reactive state
       if (tempContacts.length > 0) {
+        // 更新进度：进入 DB 写入阶段
+        const dbStartTime = performance.now()
+        loadProgress.value = {
+          loaded: tempContacts.length,
+          total: tempContacts.length,
+          percentage: API_PHASE_WEIGHT,
+          elapsedTime: dbStartTime - startTime,
+          phase: 'db',
+          currentBatch: 0,
+          totalBatches: 0,
+        }
+
         // 在单个 IndexedDB 事务中完成清空和全量保存，减少事务开销
         const tDbWrite = performance.now()
         console.log(
           `⏱️ [loadContactsInBackground] 开始 clearAndSaveContacts，数据量: ${tempContacts.length}`
         )
-        await db.clearAndSaveContacts(tempContacts)
+        await db.clearAndSaveContacts(tempContacts, (currentChunk, totalChunks) => {
+          // DB 写入阶段进度回调：从 80% 到 100%
+          const dbProgress = currentChunk / totalChunks
+          const overallPercentage = API_PHASE_WEIGHT + dbProgress * (100 - API_PHASE_WEIGHT)
+
+          loadProgress.value = {
+            loaded: tempContacts.length,
+            total: tempContacts.length,
+            percentage: overallPercentage,
+            elapsedTime: performance.now() - startTime,
+            phase: 'db',
+            currentBatch: currentChunk,
+            totalBatches: totalChunks,
+          }
+        })
         console.log(
           `⏱️ [loadContactsInBackground] clearAndSaveContacts 完成，耗时: ${(performance.now() - tDbWrite).toFixed(1)}ms`
         )
@@ -409,6 +480,8 @@ export const useContactStore = defineStore('contact', () => {
         loaded: tempContacts.length,
         total: tempContacts.length,
         percentage: 100,
+        completed: true,
+        elapsedTime: performance.now() - startTime,
       }
 
       console.log(

@@ -43,6 +43,12 @@ interface WorkerResponse {
   id: string
   success: boolean
   error?: string
+  /** 消息类型：progress 表示中间进度报告，complete/undefined 表示最终结果 */
+  type?: 'progress' | 'complete'
+  /** 当前已完成的块序号（从 1 开始） */
+  currentChunk?: number
+  /** 总块数 */
+  totalChunks?: number
 }
 
 // ==================== 常量 ====================
@@ -133,7 +139,8 @@ function writeChunk(database: IDBDatabase, storeName: string, items: any[]): Pro
 async function clearAndSaveMany(
   database: IDBDatabase,
   storeName: string,
-  items: any[]
+  items: any[],
+  requestId?: string
 ): Promise<void> {
   const t0 = performance.now()
   const totalChunks = Math.ceil(items.length / CHUNK_SIZE)
@@ -160,6 +167,17 @@ async function clearAndSaveMany(
     `⏱️ [Worker clearAndSaveMany] 块 1/${totalChunks} 完成（含 clear），耗时: ${(performance.now() - t0).toFixed(1)}ms`
   )
 
+  // 发送第一块的进度报告
+  if (requestId) {
+    self.postMessage({
+      id: requestId,
+      success: true,
+      type: 'progress',
+      currentChunk: 1,
+      totalChunks,
+    } satisfies WorkerResponse)
+  }
+
   // 后续事务：每块 CHUNK_SIZE 条
   for (let i = 1; i < totalChunks; i++) {
     const tChunk = performance.now()
@@ -168,6 +186,17 @@ async function clearAndSaveMany(
     console.log(
       `⏱️ [Worker clearAndSaveMany] 块 ${i + 1}/${totalChunks} 完成（${chunk.length} 条），耗时: ${(performance.now() - tChunk).toFixed(1)}ms`
     )
+
+    // 发送每块的进度报告
+    if (requestId) {
+      self.postMessage({
+        id: requestId,
+        success: true,
+        type: 'progress',
+        currentChunk: i + 1,
+        totalChunks,
+      } satisfies WorkerResponse)
+    }
   }
 
   console.log(
@@ -178,7 +207,12 @@ async function clearAndSaveMany(
 /**
  * 分块批量写入
  */
-async function saveMany(database: IDBDatabase, storeName: string, items: any[]): Promise<void> {
+async function saveMany(
+  database: IDBDatabase,
+  storeName: string,
+  items: any[],
+  requestId?: string
+): Promise<void> {
   const t0 = performance.now()
   const totalChunks = Math.ceil(items.length / CHUNK_SIZE)
   console.log(
@@ -192,6 +226,17 @@ async function saveMany(database: IDBDatabase, storeName: string, items: any[]):
     console.log(
       `⏱️ [Worker saveMany] 块 ${i + 1}/${totalChunks} 完成（${chunk.length} 条），耗时: ${(performance.now() - tChunk).toFixed(1)}ms`
     )
+
+    // 发送每块的进度报告
+    if (requestId) {
+      self.postMessage({
+        id: requestId,
+        success: true,
+        type: 'progress',
+        currentChunk: i + 1,
+        totalChunks,
+      } satisfies WorkerResponse)
+    }
   }
 
   console.log(`⏱️ [Worker saveMany] 全部完成，总耗时: ${(performance.now() - t0).toFixed(1)}ms`)
@@ -235,7 +280,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       case 'clearAndSaveMany': {
         if (!storeName) throw new Error('clearAndSaveMany 需要 storeName')
         const database = await ensureDB(dbConfig)
-        await clearAndSaveMany(database, storeName, items || [])
+        await clearAndSaveMany(database, storeName, items || [], id)
         respond(true)
         break
       }
@@ -243,7 +288,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       case 'saveMany': {
         if (!storeName) throw new Error('saveMany 需要 storeName')
         const database = await ensureDB(dbConfig)
-        await saveMany(database, storeName, items || [])
+        await saveMany(database, storeName, items || [], id)
         respond(true)
         break
       }

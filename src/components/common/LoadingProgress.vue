@@ -12,6 +12,8 @@ interface Props {
     estimatedTimeRemaining?: number
     currentBatch?: number
     totalBatches?: number
+    /** 当前阶段：api=正在从 API 拉取, db=正在写入数据库 */
+    phase?: 'api' | 'db'
   } | null
   visible?: boolean
   position?: 'top' | 'bottom' | 'fixed'
@@ -74,6 +76,14 @@ const statusText = computed(() => {
 
   if (isIndeterminate.value) {
     return `正在加载... 已加载 ${props.progress.loaded} 项`
+  }
+
+  // DB 写入阶段
+  if (props.progress.phase === 'db') {
+    if (props.progress.currentBatch && props.progress.totalBatches) {
+      return `正在保存到数据库... ${props.progress.currentBatch}/${props.progress.totalBatches}`
+    }
+    return '正在保存到数据库...'
   }
 
   return `正在加载联系人... ${props.progress.loaded} 项`
