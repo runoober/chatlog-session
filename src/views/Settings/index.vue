@@ -260,7 +260,7 @@ const handleExportData = async () => {
     }).catch(() => null)
 
     if (!result) return
-    const format = result.value as string
+    const format = (result as { value: string }).value
 
     // 显示导出中提示
     const loading = ElLoading.service({
