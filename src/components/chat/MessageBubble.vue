@@ -47,6 +47,13 @@ const {
   isPatMessage,
   isForwardedMessage,
   isFileMessage,
+  isLinkMessage,
+  isMiniProgramMessage,
+  isShoppingMiniProgramMessage,
+  isShortVideoMessage,
+  isLocationMessage,
+  isImageMessage,
+  isVideoMessage,
   referMessage,
   referMessageType,
   messageConfig,
@@ -174,14 +181,13 @@ const componentProps = computed(() => {
   }
 })
 
-// 转发消息对话框
+// ==================== 事件处理 ====================
 const forwardedDialogVisible = ref(false)
 const forwardedMessages = computed(() => {
   const dataItems = props.message.contents?.recordInfo?.DataList?.DataItems || []
   return dataItems
 })
 
-// ==================== 事件处理 ====================
 const handleForwardedClick = () => {
   forwardedDialogVisible.value = true
 }
@@ -193,11 +199,77 @@ const handleFileClick = () => {
   }
 }
 
+const handleLinkClick = () => {
+  const linkUrl = messageUrls.linkUrl.value
+  if (linkUrl) {
+    window.open(linkUrl, '_blank')
+  }
+}
+
+const handleMiniProgramClick = () => {
+  const url = messageUrls.miniProgramUrl.value
+  if (url) {
+    window.open(url, '_blank')
+  }
+}
+
+const handleShoppingMiniProgramClick = () => {
+  const url = messageUrls.shoppingMiniProgramUrl.value
+  if (url) {
+    window.open(url, '_blank')
+  }
+}
+
+const handleShortVideoClick = () => {
+  const url = messageUrls.shortVideoUrl.value
+  if (url) {
+    window.open(url, '_blank')
+  }
+}
+
+const handleLocationClick = () => {
+  const x = messageUrls.locationX.value
+  const y = messageUrls.locationY.value
+  const label = messageUrls.locationLabel.value
+  if (x && y) {
+    const mapUrl = `https://apis.map.qq.com/uri/v1/marker?marker=coord:${x},${y};title:${encodeURIComponent(label)}&referer=chatlog-session`
+    window.open(mapUrl, '_blank')
+  }
+}
+
+const handleImageClick = () => {
+  const imageUrl = messageUrls.imageUrl.value
+  if (imageUrl) {
+    window.open(imageUrl, '_blank')
+  }
+}
+
+const handleVideoClick = () => {
+  const videoUrl = messageUrls.videoUrl.value
+  if (videoUrl) {
+    window.open(videoUrl, '_blank')
+  }
+}
+
 const handleComponentClick = () => {
   if (isForwardedMessage.value) {
     handleForwardedClick()
   } else if (isFileMessage.value) {
     handleFileClick()
+  } else if (isLinkMessage.value) {
+    handleLinkClick()
+  } else if (isMiniProgramMessage.value) {
+    handleMiniProgramClick()
+  } else if (isShoppingMiniProgramMessage.value) {
+    handleShoppingMiniProgramClick()
+  } else if (isShortVideoMessage.value) {
+    handleShortVideoClick()
+  } else if (isLocationMessage.value) {
+    handleLocationClick()
+  } else if (isImageMessage.value) {
+    handleImageClick()
+  } else if (isVideoMessage.value) {
+    handleVideoClick()
   }
 }
 
