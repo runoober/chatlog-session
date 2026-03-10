@@ -5,7 +5,12 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { chatlogAPI, mediaAPI } from '@/api'
 import type { Message } from '@/types/message'
-import { createEmptyRangeMessage, createGapMessage, parseTimeRangeStart, parseTimeRangeEnd } from '@/types/message'
+import {
+  createEmptyRangeMessage,
+  createGapMessage,
+  parseTimeRangeStart,
+  parseTimeRangeEnd,
+} from '@/types/message'
 import type { SearchParams } from '@/types/api'
 import { useAppStore } from './app'
 import { useMessageCacheStore } from './messageCache'
@@ -13,15 +18,20 @@ import { useAutoRefreshStore } from './autoRefresh'
 import { formatCSTRange } from '@/utils/timezone'
 import { formatDateGroup, formatDate } from '@/utils/date'
 import {
+  assertChronologicalOrder,
+  getMessageTimestamp,
   getLatestMessageTime,
   getFirstMessageTime,
   fetchSmartHistoryMessages,
   deduplicateMessages,
   detectTimeGap,
+  normalizeBatchToChronological,
+  mergeChronologicalMessages,
+  isRealMessage,
   loadMessagesInTimeRange,
   handleEmptyResult,
   checkDataConnection,
-  estimateMessageCount
+  estimateMessageCount,
 } from './chat/utils'
 
 export const useChatStore = defineStore('chat', () => {
@@ -39,7 +49,7 @@ export const useChatStore = defineStore('chat', () => {
 
   // 监听缓存更新事件
   const handleCacheUpdate = (event: CustomEvent) => {
-    if(appStore.isDebug){
+    if (appStore.isDebug) {
       console.log('🛎️ Chatlog cache updated event received:', event.detail)
     }
     const { talker, messages: newMessages } = event.detail
@@ -48,16 +58,18 @@ export const useChatStore = defineStore('chat', () => {
     if (talker === currentTalker.value) {
       // 找出新增的消息（基于 id 和 seq）
       const existingIds = new Set(messages.value.map(m => `${m.id}_${m.seq}`))
-      const actualNewMessages = newMessages.filter((m: Message) => !existingIds.has(`${m.id}_${m.seq}`))
+      const actualNewMessages = newMessages.filter(
+        (m: Message) => !existingIds.has(`${m.id}_${m.seq}`)
+      )
 
       if (actualNewMessages.length > 0) {
-        // 只添加新消息到末尾
-        messages.value = [...messages.value, ...actualNewMessages]
+        // 归一化后合并，确保顺序稳定
+        mergeWithCurrentMessages(actualNewMessages, 'cacheUpdate')
 
         if (appStore.isDebug) {
           console.log(`🔄 Auto-updated messages for current session: ${talker}`, {
             existingCount: messages.value.length - actualNewMessages.length,
-            newMessagesCount: actualNewMessages.length
+            newMessagesCount: actualNewMessages.length,
           })
         }
       }
@@ -161,7 +173,7 @@ export const useChatStore = defineStore('chat', () => {
    * [{ date: '2023-11-11', formattedDate: '昨天', messages: [...] }]
    */
   const messagesByDate = computed(() => {
-    const grouped: Record<string, { formattedDate: string, messages: Message[] }> = {}
+    const grouped: Record<string, { formattedDate: string; messages: Message[] }> = {}
 
     currentMessages.value.forEach(message => {
       // 优先使用 time（ISO 字符串），回退到 createTime（Unix 秒）
@@ -179,9 +191,10 @@ export const useChatStore = defineStore('chat', () => {
       }
 
       // 解析日期对象
-      const dateObj = typeof timestamp === 'string'
-        ? new Date(timestamp)
-        : new Date(timestamp < 10000000000 ? timestamp * 1000 : timestamp)
+      const dateObj =
+        typeof timestamp === 'string'
+          ? new Date(timestamp)
+          : new Date(timestamp < 10000000000 ? timestamp * 1000 : timestamp)
 
       if (isNaN(dateObj.getTime())) {
         if (appStore.isDebug) {
@@ -196,17 +209,17 @@ export const useChatStore = defineStore('chat', () => {
       if (!grouped[canonicalDate]) {
         grouped[canonicalDate] = {
           formattedDate,
-          messages: []
+          messages: [],
         }
       }
       grouped[canonicalDate].messages.push(message)
     })
 
-    // 转换为数组并返回
+    // 转换为数组并返回（仅分组，不做排序纠错；顺序由上游 messages 保证）
     return Object.entries(grouped).map(([date, data]) => ({
       date,
       formattedDate: data.formattedDate,
-      messages: data.messages
+      messages: data.messages,
     }))
   })
 
@@ -231,6 +244,62 @@ export const useChatStore = defineStore('chat', () => {
   const mediaMessages = computed(() => {
     return currentMessages.value.filter(msg => mediaAPI.isMediaMessage(msg.type))
   })
+
+  // ==================== 消息顺序辅助 ====================
+  const normalizeAndAssertBatch = (batch: Message[], label: string) => {
+    const normalized = normalizeBatchToChronological(batch, appStore.isDebug)
+    assertChronologicalOrder(normalized, appStore.isDebug, `${label}:normalized`)
+    return normalized
+  }
+
+  const mergeWithCurrentMessages = (incomingBatch: Message[], label: string) => {
+    const current = normalizeBatchToChronological(messages.value, appStore.isDebug)
+    const incoming = normalizeBatchToChronological(incomingBatch, appStore.isDebug)
+
+    const currentFirst = getFirstRealMessage(current)
+    const currentLast = getLastRealMessage(current)
+    const incomingFirst = getFirstRealMessage(incoming)
+    const incomingLast = getLastRealMessage(incoming)
+
+    if (!currentFirst || !currentLast || !incomingFirst || !incomingLast) {
+      messages.value = mergeChronologicalMessages(current, incoming)
+      assertChronologicalOrder(messages.value, appStore.isDebug, `${label}:merged`)
+      return
+    }
+
+    const currentFirstTs = getMessageTimestamp(currentFirst)
+    const currentLastTs = getMessageTimestamp(currentLast)
+    const incomingFirstTs = getMessageTimestamp(incomingFirst)
+    const incomingLastTs = getMessageTimestamp(incomingLast)
+
+    if (incomingLastTs <= currentFirstTs) {
+      messages.value = [...incoming, ...current]
+      assertChronologicalOrder(messages.value, appStore.isDebug, `${label}:prepend`)
+      return
+    }
+
+    if (incomingFirstTs >= currentLastTs) {
+      messages.value = [...current, ...incoming]
+      assertChronologicalOrder(messages.value, appStore.isDebug, `${label}:append`)
+      return
+    }
+
+    messages.value = mergeChronologicalMessages(current, incoming)
+    assertChronologicalOrder(messages.value, appStore.isDebug, `${label}:merged`)
+  }
+
+  const getFirstRealMessage = (list: Message[]) => list.find(isRealMessage)
+
+  const getLastRealMessage = (list: Message[]) => {
+    for (let i = list.length - 1; i >= 0; i--) {
+      if (isRealMessage(list[i])) return list[i]
+    }
+    return undefined
+  }
+
+  const getChronologicalMessages = () => {
+    return normalizeBatchToChronological(messages.value, appStore.isDebug)
+  }
 
   /**
    * 图片消息列表
@@ -259,14 +328,23 @@ export const useChatStore = defineStore('chat', () => {
    * 加载消息列表
    * 优先从缓存加载，如果没有缓存则从 API 加载并缓存
    */
-  async function loadMessages(talker: string, page = 1, append = false, timeRange?: string, bottom = 0) {
+  async function loadMessages(
+    talker: string,
+    page = 1,
+    append = false,
+    timeRange?: string,
+    bottom = 0
+  ) {
     //如果 beforeTime 不包含 ~ , 则说明不是时间范围， 则需要补充成一个时间范围
     if (timeRange && !timeRange.includes('~')) {
       // 获取beforeTime 当天的 0 点
-      const beforeDate = typeof timeRange === 'string'
-        ? new Date(timeRange)
-        : new Date(timeRange * 1000)
-      const startOfDay = (new Date(beforeDate.getFullYear(), beforeDate.getMonth(), beforeDate.getDate()))
+      const beforeDate =
+        typeof timeRange === 'string' ? new Date(timeRange) : new Date(timeRange * 1000)
+      const startOfDay = new Date(
+        beforeDate.getFullYear(),
+        beforeDate.getMonth(),
+        beforeDate.getDate()
+      )
       // 获取beforeTime 当天的 23:59:59
       const endOfDay = timeRange
 
@@ -293,9 +371,8 @@ export const useChatStore = defineStore('chat', () => {
           if (refreshStore.config.enabled) {
             // 获取缓存中最新消息的时间（东八区 ISO 格式）
             const startFromTime = getLatestMessageTime(cached)
-              //if(!timeRange || !startFromTime || timeRange > startFromTime)
+            //if(!timeRange || !startFromTime || timeRange > startFromTime)
             {
-
               if (appStore.isDebug) {
                 console.log('⏳ Triggering background refresh for talker:', talker)
                 console.log('📅 Start from time:', startFromTime)
@@ -315,6 +392,7 @@ export const useChatStore = defineStore('chat', () => {
 
         // 直接使用传入的时间字符串参数
         result = await chatlogAPI.getSessionMessages(talker, timeRange, limit, offset, bottom)
+        result = normalizeAndAssertBatch(result, 'loadMessages:api')
 
         // 第一页时保存到缓存
         if (page === 1 && !append) {
@@ -325,20 +403,28 @@ export const useChatStore = defineStore('chat', () => {
       // 调试：输出第一条消息的时间信息
       if (result.length > 0) {
         const firstMsg = result[0]
-        console.log('📝 First message debug:', {
-          id: firstMsg.id,
-          seq: firstMsg.seq,
-          time: firstMsg.time,
-          createTime: firstMsg.createTime,
-          timeType: typeof firstMsg.time,
-          createTimeType: typeof firstMsg.createTime,
-          timeValid: firstMsg.time ? !isNaN(new Date(firstMsg.time).getTime()) : false,
-          createTimeValid: firstMsg.createTime ? !isNaN(new Date(firstMsg.createTime * 1000).getTime()) : false,
-        })
+        const lastMsg = result[result.length - 1]
+        if (appStore.isDebug) {
+          console.log('📝 Batch order debug:', {
+            count: result.length,
+            first: {
+              id: firstMsg.id,
+              seq: firstMsg.seq,
+              time: firstMsg.time,
+              timestamp: getMessageTimestamp(firstMsg),
+            },
+            last: {
+              id: lastMsg.id,
+              seq: lastMsg.seq,
+              time: lastMsg.time,
+              timestamp: getMessageTimestamp(lastMsg),
+            },
+          })
+        }
       }
 
       // 插入 EmptyRange 消息
-      if ( timeRange && page === 1 && !append) {
+      if (timeRange && page === 1 && !append) {
         const suggestedBeforeTime = parseTimeRangeStart(timeRange)
         const newestMsgTime = getFirstMessageTime(result)
 
@@ -354,17 +440,18 @@ export const useChatStore = defineStore('chat', () => {
           console.log('📝 EmptyRange message created for empty load:', {
             talker,
             timeRange: timeRange,
-            suggestedBeforeTime: new Date(suggestedBeforeTime).toISOString()
+            suggestedBeforeTime: new Date(suggestedBeforeTime).toISOString(),
           })
         }
 
-        result = [emptyRangeMessage, ...result ]
+        result = [emptyRangeMessage, ...result]
       }
 
       if (append) {
-        messages.value = [...messages.value, ...result]
+        mergeWithCurrentMessages(result, 'loadMessages:append')
       } else {
-        messages.value = result
+        messages.value = normalizeAndAssertBatch(result, 'loadMessages:replace')
+        assertChronologicalOrder(messages.value, appStore.isDebug, 'loadMessages:replace')
         currentTalker.value = talker
       }
 
@@ -378,7 +465,6 @@ export const useChatStore = defineStore('chat', () => {
           count: result.length,
           hasMore: hasMore.value,
         })
-
       }
 
       return result
@@ -413,11 +499,10 @@ export const useChatStore = defineStore('chat', () => {
    * @returns 加载的历史消息列表和元数据
    */
 
-
   async function loadHistoryMessages(
     talker: string,
     beforeTime: string | number
-   ): Promise<{ messages: Message[], hasMore: boolean, timeRange: string, offset: number }> {
+  ): Promise<{ messages: Message[]; hasMore: boolean; timeRange: string; offset: number }> {
     if (loadingHistory.value) {
       console.warn('History loading already in progress')
       return { messages: [], hasMore: false, timeRange: '', offset: 0 }
@@ -428,29 +513,48 @@ export const useChatStore = defineStore('chat', () => {
       historyLoadMessage.value = ''
       appStore.setLoading('history', true)
 
-      const limit = pageSize.value  // 使用配置的 pageSize
+      const limit = pageSize.value // 使用配置的 pageSize
 
       let result: Message[] = []
       let finalTimeRange = ''
       let retryCount = 0
 
       // 使用智能策略获取消息
-      const smartResult = await fetchSmartHistoryMessages(messages.value, talker, beforeTime, limit, 0, appStore.isDebug)
+      const smartResult = await fetchSmartHistoryMessages(
+        messages.value,
+        talker,
+        beforeTime,
+        limit,
+        0,
+        appStore.isDebug
+      )
       result = smartResult.result
+      result = normalizeAndAssertBatch(result, 'loadHistoryMessages:api')
       finalTimeRange = smartResult.finalTimeRange
       retryCount = smartResult.retryCount
 
       // 如果返回空结果
       if (result.length === 0) {
-        const emptyResult = handleEmptyResult(messages.value, talker, finalTimeRange, 0, retryCount, appStore.isDebug)
+        const emptyResult = handleEmptyResult(
+          messages.value,
+          talker,
+          finalTimeRange,
+          0,
+          retryCount,
+          appStore.isDebug
+        )
         if (emptyResult.newMessages && emptyResult.newMessages.length > 0) {
-          messages.value = emptyResult.messages
+          messages.value = normalizeAndAssertBatch(
+            emptyResult.messages,
+            'loadHistoryMessages:empty'
+          )
+          assertChronologicalOrder(messages.value, appStore.isDebug, 'loadHistoryMessages:empty')
         }
         return {
           messages: emptyResult.newMessages,
           hasMore: emptyResult.hasMore,
           timeRange: emptyResult.timeRange,
-          offset: 0
+          offset: 0,
         }
       }
 
@@ -458,12 +562,16 @@ export const useChatStore = defineStore('chat', () => {
       if (appStore.isDebug) {
         console.log('✅ History messages loaded:', {
           count: result.length,
-          timeRange: finalTimeRange
+          timeRange: finalTimeRange,
         })
       }
 
       // 消息去重
       const uniqueNewMessages = deduplicateMessages(messages.value, result, appStore.isDebug)
+      const normalizedUniqueMessages = normalizeAndAssertBatch(
+        uniqueNewMessages,
+        'loadHistoryMessages:dedup'
+      )
 
       // 判断是否还有更多历史消息
       // 如果返回的消息数等于 limit，说明该时间范围还有更多数据
@@ -473,19 +581,17 @@ export const useChatStore = defineStore('chat', () => {
       // 如果满载，则不检测 EmptyRange（两者互斥）
       let gapToInsert: Message | null = null
       let emptyRangeToInsert: Message | null = null
-      
-      if (hasMoreHistory && uniqueNewMessages.length > 0) {
+
+      if (hasMoreHistory && normalizedUniqueMessages.length > 0) {
         // 检查新数据是否与已有数据衔接
         const isConnected = checkDataConnection(result, messages.value)
-        
+
         if (!isConnected) {
           // 如果未衔接，才插入 Gap（标记更新的未加载数据）
           const requestedEndTime = parseTimeRangeEnd(finalTimeRange)
-          const newestLoadedMsg = uniqueNewMessages[uniqueNewMessages.length - 1]
-          const newestLoadedTime = newestLoadedMsg.time 
-            ? new Date(newestLoadedMsg.time).getTime() 
-            : newestLoadedMsg.createTime * 1000
-          
+          const newestLoadedMsg = normalizedUniqueMessages[normalizedUniqueMessages.length - 1]
+          const newestLoadedTime = getMessageTimestamp(newestLoadedMsg)
+
           // 根据消息密度估算 Gap 范围内的消息数量
           const estimatedCount = estimateMessageCount(
             messages.value,
@@ -493,21 +599,16 @@ export const useChatStore = defineStore('chat', () => {
             newestLoadedTime,
             requestedEndTime
           )
-          
+
           // Gap 标记更新的未加载部分
-          gapToInsert = createGapMessage(
-            talker, 
-            newestLoadedTime,
-            requestedEndTime,
-            estimatedCount
-          )
-          
+          gapToInsert = createGapMessage(talker, newestLoadedTime, requestedEndTime, estimatedCount)
+
           if (appStore.isDebug) {
             console.log('📌 Creating Gap message at bottom for newer data:', {
               newestLoaded: new Date(newestLoadedTime).toISOString(),
               requestedEnd: new Date(requestedEndTime).toISOString(),
               estimatedCount,
-              actualLoaded: result.length
+              actualLoaded: result.length,
             })
           }
         } else {
@@ -517,7 +618,13 @@ export const useChatStore = defineStore('chat', () => {
         }
       } else {
         // 如果未满载，检测时间间隙，插入 EmptyRange
-        emptyRangeToInsert = detectTimeGap(talker, finalTimeRange, 0, uniqueNewMessages, appStore.isDebug)
+        emptyRangeToInsert = detectTimeGap(
+          talker,
+          finalTimeRange,
+          0,
+          normalizedUniqueMessages,
+          appStore.isDebug
+        )
       }
 
       // 插入消息到列表
@@ -526,11 +633,11 @@ export const useChatStore = defineStore('chat', () => {
       if (emptyRangeToInsert) {
         messagesToInsert.push(emptyRangeToInsert)
       }
-      messagesToInsert.push(...uniqueNewMessages)
+      messagesToInsert.push(...normalizedUniqueMessages)
       if (gapToInsert) {
         messagesToInsert.push(gapToInsert)
       }
-      messages.value = [...messagesToInsert, ...messages.value]
+      mergeWithCurrentMessages(messagesToInsert, 'loadHistoryMessages:merge')
 
       // 清除提示信息
       historyLoadMessage.value = ''
@@ -539,17 +646,18 @@ export const useChatStore = defineStore('chat', () => {
         console.log('📊 History loading result:', {
           loaded: result.length,
           unique: uniqueNewMessages.length,
+          normalizedUnique: normalizedUniqueMessages.length,
           hasMore: hasMoreHistory,
           gapInserted: !!gapToInsert,
-          emptyRangeInserted: !!emptyRangeToInsert
+          emptyRangeInserted: !!emptyRangeToInsert,
         })
       }
 
       return {
-        messages: uniqueNewMessages,
+        messages: normalizedUniqueMessages,
         hasMore: hasMoreHistory,
         timeRange: finalTimeRange,
-        offset: 0
+        offset: 0,
       }
     } catch (err) {
       error.value = err as Error
@@ -562,15 +670,15 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-
-
   /**
    * 刷新消息列表
    */
   /**
    * 加载 Gap 消息对应的历史数据
    */
-  async function loadGapMessages(gapMessage: Message): Promise<{ success: boolean, hasMore: boolean }> {
+  async function loadGapMessages(
+    gapMessage: Message
+  ): Promise<{ success: boolean; hasMore: boolean }> {
     if (!gapMessage.isGap || !gapMessage.gapData) {
       console.warn('Invalid gap message')
       return { success: false, hasMore: false }
@@ -583,7 +691,7 @@ export const useChatStore = defineStore('chat', () => {
       console.log('🔄 Loading Gap messages:', {
         timeRange,
         gapId: gapMessage.id,
-        limit
+        limit,
       })
     }
 
@@ -592,12 +700,15 @@ export const useChatStore = defineStore('chat', () => {
       removeGapMessage(gapMessage.id)
 
       // 直接加载 Gap 标记的时间范围数据（使用 bottom=1 从末尾开始）
-      const result = await loadMessagesInTimeRange(gapMessage.talker, timeRange, limit, 0)
+      const result = normalizeAndAssertBatch(
+        await loadMessagesInTimeRange(gapMessage.talker, timeRange, limit, 0),
+        'loadGapMessages:api'
+      )
 
       if (appStore.isDebug) {
         console.log('✅ Gap messages loaded:', {
           count: result.length,
-          limit
+          limit,
         })
       }
 
@@ -608,23 +719,25 @@ export const useChatStore = defineStore('chat', () => {
 
       // 消息去重
       const uniqueNewMessages = deduplicateMessages(messages.value, result, appStore.isDebug)
+      const normalizedUniqueMessages = normalizeAndAssertBatch(
+        uniqueNewMessages,
+        'loadGapMessages:dedup'
+      )
 
       // 判断是否还有更多数据
       const hasMoreInGap = result.length >= limit
 
       // 如果还有更多数据，创建新的 Gap 消息到底部
       let newGapToInsert: Message | null = null
-      if (hasMoreInGap && uniqueNewMessages.length > 0) {
+      if (hasMoreInGap && normalizedUniqueMessages.length > 0) {
         // 检查新数据是否与已有数据衔接
         const isConnected = checkDataConnection(result, messages.value)
-        
+
         if (!isConnected) {
           const requestedEndTime = parseTimeRangeEnd(timeRange)
-          const newestLoadedMsg = uniqueNewMessages[uniqueNewMessages.length - 1]
-          const newestLoadedTime = newestLoadedMsg.time 
-            ? new Date(newestLoadedMsg.time).getTime() 
-            : newestLoadedMsg.createTime * 1000
-          
+          const newestLoadedMsg = normalizedUniqueMessages[normalizedUniqueMessages.length - 1]
+          const newestLoadedTime = getMessageTimestamp(newestLoadedMsg)
+
           // 根据消息密度估算剩余消息数量
           const estimatedCount = estimateMessageCount(
             messages.value,
@@ -632,21 +745,21 @@ export const useChatStore = defineStore('chat', () => {
             newestLoadedTime,
             requestedEndTime
           )
-          
+
           // 创建新的 Gap 标记剩余未加载部分（底部）
           newGapToInsert = createGapMessage(
-            gapMessage.talker, 
+            gapMessage.talker,
             newestLoadedTime,
             requestedEndTime,
             estimatedCount
           )
-          
+
           if (appStore.isDebug) {
             console.log('📌 Creating new Gap at bottom for remaining data:', {
               newestLoaded: new Date(newestLoadedTime).toISOString(),
               requestedEnd: new Date(requestedEndTime).toISOString(),
               estimatedCount,
-              actualLoaded: result.length
+              actualLoaded: result.length,
             })
           }
         } else {
@@ -658,15 +771,15 @@ export const useChatStore = defineStore('chat', () => {
 
       // 插入新加载的消息（和可能的新 Gap）到列表
       const messagesToInsert: Message[] = []
-      messagesToInsert.push(...uniqueNewMessages)
+      messagesToInsert.push(...normalizedUniqueMessages)
       if (newGapToInsert) {
         messagesToInsert.push(newGapToInsert)
       }
-      messages.value = [...messagesToInsert, ...messages.value]
+      mergeWithCurrentMessages(messagesToInsert, 'loadGapMessages:merge')
 
       return {
         success: result.length > 0,
-        hasMore: hasMoreInGap
+        hasMore: hasMoreInGap,
       }
     } catch (err) {
       console.error('Gap messages loading failed:', err)
@@ -868,7 +981,8 @@ export const useChatStore = defineStore('chat', () => {
    * 导出选中的消息
    */
   async function exportSelectedMessages(format: 'json' | 'csv' | 'text' = 'json') {
-    const selected = getSelectedMessages()
+    const selectedIds = selectedMessageIds.value
+    const selected = getChronologicalMessages().filter(msg => selectedIds.has(msg.id))
     if (selected.length === 0) return
 
     const ids = selected.map(msg => msg.id).join(',')
@@ -922,8 +1036,6 @@ export const useChatStore = defineStore('chat', () => {
 
     return stats
   }
-
-
 
   /**
    * 清除错误
@@ -1021,6 +1133,6 @@ export const useChatStore = defineStore('chat', () => {
     getMessageStats,
     clearError,
     $reset,
-    cleanup
+    cleanup,
   }
 })

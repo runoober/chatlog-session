@@ -48,6 +48,83 @@ function transformMessages(responses: MessageResponse[]): Message[] {
 }
 
 /**
+ * 提取消息时间戳（毫秒）
+ */
+function getMessageTimestamp(message: Message): number {
+  if (message.time) {
+    const timeValue = new Date(message.time).getTime()
+    if (!isNaN(timeValue)) {
+      return timeValue
+    }
+  }
+
+  return message.createTime < 10000000000 ? message.createTime * 1000 : message.createTime
+}
+
+/**
+ * 比较消息顺序（旧 -> 新）
+ */
+function compareMessageOrder(a: Message, b: Message): number {
+  const timeDiff = getMessageTimestamp(a) - getMessageTimestamp(b)
+  if (timeDiff !== 0) return timeDiff
+
+  const seqDiff = (a.seq || 0) - (b.seq || 0)
+  if (seqDiff !== 0) return seqDiff
+
+  return (a.id || 0) - (b.id || 0)
+}
+
+/**
+ * 批次归一化为旧 -> 新
+ */
+function normalizeBatch(messages: Message[]): Message[] {
+  if (messages.length < 2) return [...messages]
+
+  const firstTime = getMessageTimestamp(messages[0])
+  const lastTime = getMessageTimestamp(messages[messages.length - 1])
+
+  if (firstTime > lastTime) {
+    return [...messages].reverse()
+  }
+
+  return [...messages]
+}
+
+/**
+ * 合并两个有序数组（均为旧 -> 新）
+ */
+function mergeChronological(existing: Message[], incoming: Message[]): Message[] {
+  if (!existing.length) return [...incoming]
+  if (!incoming.length) return [...existing]
+
+  const merged: Message[] = []
+  let i = 0
+  let j = 0
+
+  while (i < existing.length && j < incoming.length) {
+    if (compareMessageOrder(existing[i], incoming[j]) <= 0) {
+      merged.push(existing[i])
+      i++
+    } else {
+      merged.push(incoming[j])
+      j++
+    }
+  }
+
+  while (i < existing.length) {
+    merged.push(existing[i])
+    i++
+  }
+
+  while (j < incoming.length) {
+    merged.push(incoming[j])
+    j++
+  }
+
+  return merged
+}
+
+/**
  * 格式化日期为 YYYY-MM-DD
  */
 function formatDate(date: Date): string {
@@ -376,7 +453,12 @@ class ChatlogAPI {
           break
         }
 
-        allMessages.push(...messages)
+        const normalizedBatch = normalizeBatch(messages)
+        allMessages.splice(
+          0,
+          allMessages.length,
+          ...mergeChronological(allMessages, normalizedBatch)
+        )
         offset += messages.length
 
         // 更新进度
