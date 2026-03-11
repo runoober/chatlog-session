@@ -14,7 +14,7 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   sessionId: '',
   showDate: true,
-  initialTime: undefined
+  initialTime: undefined,
 })
 
 const chatStore = useChatStore()
@@ -27,8 +27,6 @@ const loadingHistory = ref(false)
 const hasMoreHistory = ref(true)
 const error = ref<string | null>(null)
 const historyLoadMessage = ref('')
-
-
 
 // 当前消息列表
 const messages = computed(() => {
@@ -109,15 +107,17 @@ const handleLoadHistory = async () => {
     const scrollTop = messageListRef.value?.scrollTop || 0
     const scrollHeight = messageListRef.value?.scrollHeight || 0
 
-    // 找到第一条非虚拟消息（非 Gap、非 EmptyRange）
-    const firstNonVirtualMessage = messages.value.find(msg => !msg.isGap && !msg.isEmptyRange)
-    
-    if (!firstNonVirtualMessage) {
-      console.warn('无法找到有效的消息作为加载起点')
-      return
-    }
+    // 使用顶部消息作为继续加载锚点（优先虚拟消息）
+    const topMessage = messages.value[0]
+    let beforeTime: string | number | undefined
 
-    const beforeTime = firstNonVirtualMessage.time || firstNonVirtualMessage.createTime
+    if (topMessage?.isEmptyRange && topMessage.emptyRangeData?.suggestedBeforeTime) {
+      beforeTime = new Date(topMessage.emptyRangeData.suggestedBeforeTime).toISOString()
+    } else if (topMessage?.isGap && topMessage.gapData?.beforeTime) {
+      beforeTime = new Date(topMessage.gapData.beforeTime).toISOString()
+    } else if (topMessage) {
+      beforeTime = topMessage.time || topMessage.createTime
+    }
 
     if (!beforeTime) {
       console.warn('无法获取最早消息时间')
@@ -142,11 +142,8 @@ const handleLoadHistory = async () => {
       }
     }
 
-    // 更新 hasMoreHistory 状态
-    if (result.messages.length === 0 && !chatStore.historyLoadMessage) {
-      // 确实没有更多消息了
-      hasMoreHistory.value = false
-    }
+    // 空窗口不代表无更多历史：保持继续加载入口可用
+    hasMoreHistory.value = true
   } catch (err) {
     console.error('加载历史消息失败:', err)
   } finally {
@@ -198,7 +195,7 @@ const checkAndLoadMore = async (loadedCount: number) => {
     console.log('🔄 Auto loading more messages...', {
       loadedCount,
       pageSize,
-      totalMessages: messages.value.length
+      totalMessages: messages.value.length,
     })
 
     await handleLoadHistory()
@@ -207,7 +204,7 @@ const checkAndLoadMore = async (loadedCount: number) => {
       loadedCount,
       pageSize,
       totalMessages: messages.value.length,
-      reason: loadedCount < pageSize ? 'Reached end' : 'Manual stop'
+      reason: loadedCount < pageSize ? 'Reached end' : 'Manual stop',
     })
   }
 }
@@ -222,7 +219,7 @@ const scrollToBottom = (smooth = false) => {
 
   messageListRef.value.scrollTo({
     top: maxScroll,
-    behavior: smooth ? 'smooth' : 'auto'
+    behavior: smooth ? 'smooth' : 'auto',
   })
 
   // 双保险：直接设置 scrollTop
@@ -232,7 +229,7 @@ const scrollToBottom = (smooth = false) => {
 }
 
 // 滚动到指定消息
-const scrollToMessage = (messageId: string|number) => {
+const scrollToMessage = (messageId: string | number) => {
   const element = document.getElementById(`message-${messageId}`)
   if (element) {
     element.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -290,7 +287,9 @@ const shouldDiffFromPrev = (index: number, messages: Message[]) => {
   if (current.sender !== prev.sender) return true
 
   // 时间间隔超过5分钟显示头像
-  const currentTime = current.createTime ? current.createTime * 1000 : new Date(current.time).getTime()
+  const currentTime = current.createTime
+    ? current.createTime * 1000
+    : new Date(current.time).getTime()
   const prevTime = prev.createTime ? prev.createTime * 1000 : new Date(prev.time).getTime()
   const timeDiff = currentTime - prevTime
   if (timeDiff > 5 * 60 * 1000) return true
@@ -307,7 +306,9 @@ const shouldShowTime = (index: number, messages: Message[]) => {
 
   // 时间间隔超过5分钟显示时间
   // 使用 createTime（Unix 时间戳秒）或 time（ISO 字符串）
-  const currentTime = current.createTime ? current.createTime * 1000 : new Date(current.time).getTime()
+  const currentTime = current.createTime
+    ? current.createTime * 1000
+    : new Date(current.time).getTime()
   const prevTime = prev.createTime ? prev.createTime * 1000 : new Date(prev.time).getTime()
   const timeDiff = currentTime - prevTime
   return timeDiff > 5 * 60 * 1000
@@ -321,24 +322,28 @@ const shouldShowName = (index: number, messages: Message[]) => {
 }
 
 // 监听会话ID变化
-watch(() => props.sessionId, (newId, oldId) => {
-  if (newId && newId !== oldId) {
-    // 清理旧会话的 Gap 消息
-    if (oldId) {
-      chatStore.removeGapMessages(oldId)
+watch(
+  () => props.sessionId,
+  (newId, oldId) => {
+    if (newId && newId !== oldId) {
+      // 清理旧会话的 Gap 消息
+      if (oldId) {
+        chatStore.removeGapMessages(oldId)
+      }
+      hasMoreHistory.value = true
+      historyLoadMessage.value = ''
+      loadMessages(false)
     }
-    hasMoreHistory.value = true
-    historyLoadMessage.value = ''
-    loadMessages(false)
-  }
-}, { immediate: true })
+  },
+  { immediate: true }
+)
 
 // 暴露方法给父组件
 defineExpose({
   refresh: handleRefresh,
   scrollToBottom,
   scrollToMessage,
-  loadMessages
+  loadMessages,
 })
 </script>
 
@@ -374,12 +379,7 @@ defineExpose({
     </div>
 
     <!-- 消息列表 -->
-    <div
-      v-else
-      ref="messageListRef"
-      class="message-list__content"
-      @scroll="handleScroll"
-    >
+    <div v-else ref="messageListRef" class="message-list__content" @scroll="handleScroll">
       <!-- 顶部加载历史消息指示器 -->
       <div v-if="loadingHistory" class="message-list__loading-history">
         <el-icon class="is-loading"><Loading /></el-icon>
@@ -388,36 +388,25 @@ defineExpose({
 
       <!-- 历史消息加载提示 -->
       <div v-else-if="historyLoadMessage" class="message-list__history-message">
-        <el-alert
-          :title="historyLoadMessage"
-          type="info"
-          :closable="false"
-          center
-        />
+        <el-alert :title="historyLoadMessage" type="info" :closable="false" center />
       </div>
 
       <!-- 手动加载更多按钮（备用） -->
       <div v-else-if="showLoadMore && !loadingHistory" class="message-list__load-more">
-        <el-button
-          text
-          @click="handleLoadHistory"
-        >
-          加载更多历史消息
-        </el-button>
+        <el-button text @click="handleLoadHistory"> 加载更多历史消息 </el-button>
       </div>
 
       <!-- 没有更多消息提示 -->
-      <div v-else-if="messages.length > 0 && !hasMoreHistory && !historyLoadMessage" class="message-list__no-more">
+      <div
+        v-else-if="messages.length > 0 && !hasMoreHistory && !historyLoadMessage"
+        class="message-list__no-more"
+      >
         <el-divider>没有更多消息了</el-divider>
       </div>
 
       <!-- 按日期分组显示 -->
       <template v-if="showDate">
-        <div
-          v-for="group in messagesByDate"
-          :key="group.date"
-          class="message-group"
-        >
+        <div v-for="group in messagesByDate" :key="group.date" class="message-group">
           <!-- 日期分隔符 -->
           <div class="message-date" @click="scrollToMessage(group.messages[0].id)">
             <span>{{ group.formattedDate }} ({{ group.messages.length }} 条)</span>
@@ -459,10 +448,7 @@ defineExpose({
 
     <!-- 滚动到底部按钮 -->
     <transition name="fade">
-      <div
-        v-show="messages.length > 0"
-        class="message-list__scroll-bottom"
-      >
+      <div v-show="messages.length > 0" class="message-list__scroll-bottom">
         <!-- 日期快速跳转 -->
         <div v-if="showDate" class="date-nav">
           <div
@@ -481,11 +467,7 @@ defineExpose({
           </div>
         </div>
 
-        <el-button
-          circle
-          size="small"
-          @click="scrollToBottom(true)"
-        >
+        <el-button circle size="small" @click="scrollToBottom(true)">
           <el-icon><ArrowDown /></el-icon>
         </el-button>
       </div>
@@ -697,7 +679,8 @@ defineExpose({
 }
 
 @keyframes highlight {
-  0%, 100% {
+  0%,
+  100% {
     background-color: transparent;
   }
   50% {
@@ -735,7 +718,8 @@ defineExpose({
   }
 
   @keyframes highlight {
-    0%, 100% {
+    0%,
+    100% {
       background-color: transparent;
     }
     50% {

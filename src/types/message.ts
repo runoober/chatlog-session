@@ -1,4 +1,4 @@
-import { toCST, formatCSTTime } from "@/utils/timezone"
+import { toCST, formatCSTTime, formatCSTDate } from '@/utils/timezone'
 
 /**
  * 消息类型枚举
@@ -199,7 +199,7 @@ export const MessageTypeMap: Record<string, string> = {
   '62': '拍一拍',
   '63': '直播',
   '2000': '转账',
-  '2001': '红包'
+  '2001': '红包',
 }
 
 /**
@@ -227,7 +227,7 @@ export const MessageIconMap: Record<string, string> = {
   '62': 'Pointer',
   '63': 'VideoCamera',
   '2000': 'Wallet',
-  '2001': 'Present'
+  '2001': 'Present',
 }
 
 /**
@@ -250,12 +250,15 @@ export function createEmptyRangeMessage(
   const endTime = parseTimeRangeEnd(timeRange)
   const startDate = new Date(startTime)
   let endDate = new Date(endTime)
-  if( newestMsgTime){
+  if (newestMsgTime) {
     endDate = new Date(newestMsgTime)
   }
 
   const startStr = formatCSTTime(startDate)
   const endStr = formatCSTTime(endDate)
+  const startDay = formatCSTDate(startDate)
+  const endDay = formatCSTDate(endDate)
+  const isCrossDay = startDay !== endDay
 
   return {
     id: -Date.now() - 1000,
@@ -271,7 +274,9 @@ export function createEmptyRangeMessage(
     isChatRoom: false,
     type: MessageType.EmptyRange,
     subType: 0,
-    content: `${startStr} ~ ${endStr} 没有消息`,
+    content: isCrossDay
+      ? `${startDay} ${startStr} ~ ${endDay} ${endStr} 没有消息`
+      : `${startStr} ~ ${endStr} 没有消息`,
     isEmptyRange: true,
     emptyRangeData: {
       timeRange,
@@ -319,20 +324,18 @@ export function createGapMessage(
   gapEndTime: string | number,
   estimatedCount?: number
 ): Message {
-  const startDate = typeof gapStartTime === 'string'
-    ? new Date(gapStartTime)
-    : new Date(gapStartTime)
-  const endDate = typeof gapEndTime === 'string'
-    ? new Date(gapEndTime)
-    : new Date(gapEndTime)
+  const startDate =
+    typeof gapStartTime === 'string' ? new Date(gapStartTime) : new Date(gapStartTime)
+  const endDate = typeof gapEndTime === 'string' ? new Date(gapEndTime) : new Date(gapEndTime)
 
   const startStr = formatCSTTime(startDate)
   const endStr = formatCSTTime(endDate)
   const timeRange = `${toCST(startDate)}~${toCST(endDate)}`
 
-  const content = estimatedCount && estimatedCount > 0
-    ? `${startStr} ~ ${endStr} 还有约 ${estimatedCount} 条消息`
-    : `${startStr} ~ ${endStr} 还有更多消息`
+  const content =
+    estimatedCount && estimatedCount > 0
+      ? `${startStr} ~ ${endStr} 还有约 ${estimatedCount} 条消息`
+      : `${startStr} ~ ${endStr} 还有更多消息`
 
   return {
     id: -Date.now(),

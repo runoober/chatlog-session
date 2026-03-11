@@ -1,5 +1,5 @@
 import type { Message } from '@/types/message'
-import { createEmptyRangeMessage, parseTimeRangeStart } from '@/types/message'
+import { createEmptyRangeMessage, parseTimeRangeStart, parseTimeRangeEnd } from '@/types/message'
 import { toCST, formatCSTRange, subtractDays } from '@/utils/timezone'
 import { chatlogAPI } from '@/api'
 
@@ -392,6 +392,118 @@ export function detectTimeGap(
     }
   }
   return null
+}
+
+/**
+ * 解析 EmptyRange 的时间范围（毫秒）
+ */
+export function parseEmptyRangeBounds(message: Message): { start: number; end: number } | null {
+  if (!message.isEmptyRange || !message.emptyRangeData?.timeRange) return null
+
+  const timeRange = message.emptyRangeData.timeRange
+  const start = parseTimeRangeStart(timeRange)
+  const end = parseTimeRangeEnd(timeRange)
+
+  if (!start || !end || isNaN(start) || isNaN(end)) return null
+  return { start: Math.min(start, end), end: Math.max(start, end) }
+}
+
+/**
+ * 判断两个时间范围是否相邻或重叠
+ */
+export function isAdjacentOrOverlappingRange(
+  a: { start: number; end: number },
+  b: { start: number; end: number },
+  thresholdMs = 1000
+): boolean {
+  return Math.max(a.start, b.start) <= Math.min(a.end, b.end) + thresholdMs
+}
+
+/**
+ * 合并顶部连续 EmptyRange（同 talker）
+ */
+export function mergeTopAdjacentEmptyRanges(
+  messages: Message[],
+  talker: string,
+  isDebug = false
+): Message[] {
+  if (!messages.length) return messages
+
+  const topEmptyRanges: Message[] = []
+  let splitIndex = 0
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i]
+    if (msg.isEmptyRange && msg.talker === talker) {
+      topEmptyRanges.push(msg)
+      splitIndex = i + 1
+      continue
+    }
+    break
+  }
+
+  if (topEmptyRanges.length <= 1) {
+    return messages
+  }
+
+  const sorted = [...topEmptyRanges].sort((a, b) => {
+    const aBounds = parseEmptyRangeBounds(a)
+    const bBounds = parseEmptyRangeBounds(b)
+    if (!aBounds || !bBounds) return compareMessageOrder(a, b)
+    return aBounds.start - bBounds.start
+  })
+
+  const mergedSegments: Array<{ start: number; end: number; triedTimes: number }> = []
+  sorted.forEach(msg => {
+    const bounds = parseEmptyRangeBounds(msg)
+    if (!bounds) return
+
+    const last = mergedSegments[mergedSegments.length - 1]
+    const current = {
+      start: bounds.start,
+      end: bounds.end,
+      triedTimes: msg.emptyRangeData?.triedTimes || 0,
+    }
+
+    if (!last) {
+      mergedSegments.push(current)
+      return
+    }
+
+    if (isAdjacentOrOverlappingRange(last, current)) {
+      last.start = Math.min(last.start, current.start)
+      last.end = Math.max(last.end, current.end)
+      last.triedTimes = Math.max(last.triedTimes, current.triedTimes)
+    } else {
+      mergedSegments.push(current)
+    }
+  })
+
+  if (mergedSegments.length === topEmptyRanges.length) {
+    return messages
+  }
+
+  const mergedEmptyMessages = mergedSegments.map(segment => {
+    const mergedRange = formatCSTRange(new Date(segment.start), new Date(segment.end))
+    return createEmptyRangeMessage(
+      talker,
+      mergedRange,
+      undefined,
+      segment.triedTimes,
+      segment.start
+    )
+  })
+
+  if (isDebug) {
+    console.log('🧩 Merged top EmptyRange windows:', {
+      talker,
+      before: topEmptyRanges.length,
+      after: mergedEmptyMessages.length,
+      mergedSegments,
+    })
+  }
+
+  return [...mergedEmptyMessages, ...messages.slice(splitIndex)]
 }
 
 /**

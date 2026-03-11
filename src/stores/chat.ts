@@ -32,6 +32,7 @@ import {
   handleEmptyResult,
   checkDataConnection,
   estimateMessageCount,
+  mergeTopAdjacentEmptyRanges,
 } from './chat/utils'
 
 export const useChatStore = defineStore('chat', () => {
@@ -544,9 +545,14 @@ export const useChatStore = defineStore('chat', () => {
           appStore.isDebug
         )
         if (emptyResult.newMessages && emptyResult.newMessages.length > 0) {
-          messages.value = normalizeAndAssertBatch(
+          const normalizedEmptyMessages = normalizeAndAssertBatch(
             emptyResult.messages,
             'loadHistoryMessages:empty'
+          )
+          messages.value = mergeTopAdjacentEmptyRanges(
+            normalizedEmptyMessages,
+            talker,
+            appStore.isDebug
           )
           assertChronologicalOrder(messages.value, appStore.isDebug, 'loadHistoryMessages:empty')
         }
@@ -638,6 +644,7 @@ export const useChatStore = defineStore('chat', () => {
         messagesToInsert.push(gapToInsert)
       }
       mergeWithCurrentMessages(messagesToInsert, 'loadHistoryMessages:merge')
+      messages.value = mergeTopAdjacentEmptyRanges(messages.value, talker, appStore.isDebug)
 
       // 清除提示信息
       historyLoadMessage.value = ''
