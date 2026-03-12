@@ -1,6 +1,5 @@
 import { MessageType, RichMessageSubType } from '@/types/message'
 
-
 /**
  * 消息类型配置接口
  */
@@ -8,21 +7,21 @@ export interface MessageTypeConfig {
   // 匹配条件
   type: number
   subType?: number
-  
+
   // UI 配置
   name: string
   icon: string
   placeholder: string
-  
+
   // 组件配置
   component: string
-  
+
   // Props 映射配置
   // message: 消息对象
   // context: 上下文对象，包含 showMediaResources、referMessage、referMessageType 和所有 URL 字段的值（非 ComputedRef）
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   propsMapper?: (message: any, context: any) => Record<string, any>
-  
+
   // 优先级（数字越大优先级越高，用于解决匹配冲突）
   priority?: number
 }
@@ -40,9 +39,9 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
     placeholder: '',
     component: 'TextMessage',
     priority: 100,
-    propsMapper: (msg) => ({ content: msg.content })
+    propsMapper: msg => ({ content: msg.content }),
   },
-  
+
   {
     type: MessageType.Image,
     name: '图片',
@@ -53,11 +52,13 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
     propsMapper: (msg, ctx) => ({
       thumbUrl: ctx.imageThumbUrl,
       imageUrl: ctx.imageUrl,
+      imageList: ctx.imagePreviewList,
+      initialIndex: ctx.imagePreviewIndex,
       showMediaResources: ctx.showMediaResources,
-      md5: msg.contents?.md5
-    })
+      md5: msg.contents?.md5,
+    }),
   },
-  
+
   {
     type: MessageType.Voice,
     name: '语音',
@@ -69,10 +70,10 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
       voiceUrl: ctx.voiceUrl,
       duration: msg.duration,
       isSelf: msg.isSelf,
-      showMediaResources: ctx.showMediaResources
-    })
+      showMediaResources: ctx.showMediaResources,
+    }),
   },
-  
+
   {
     type: MessageType.Video,
     name: '视频',
@@ -84,10 +85,10 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
       videoUrl: ctx.videoUrl,
       showMediaResources: ctx.showMediaResources,
       content: msg.content,
-      md5: msg.contents?.md5
-    })
+      md5: msg.contents?.md5,
+    }),
   },
-  
+
   {
     type: MessageType.Emoji,
     name: '表情',
@@ -98,10 +99,10 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
     propsMapper: (msg, ctx) => ({
       emojiUrl: ctx.emojiUrl,
       showMediaResources: ctx.showMediaResources,
-      cdnurl: msg.contents?.cdnurl
-    })
+      cdnurl: msg.contents?.cdnurl,
+    }),
   },
-  
+
   {
     type: MessageType.ContactCard,
     name: '个人名片',
@@ -110,10 +111,10 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
     component: 'ContactCardMessage',
     priority: 100,
     propsMapper: (_msg, ctx) => ({
-      showMediaResources: ctx.showMediaResources
-    })
+      showMediaResources: ctx.showMediaResources,
+    }),
   },
-  
+
   {
     type: MessageType.Location,
     name: '位置',
@@ -126,10 +127,10 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
       x: ctx.locationX,
       y: ctx.locationY,
       cityname: ctx.locationCityname,
-      showMediaResources: ctx.showMediaResources
-    })
+      showMediaResources: ctx.showMediaResources,
+    }),
   },
-  
+
   {
     type: MessageType.QQMail,
     name: 'QQ邮箱消息',
@@ -138,10 +139,10 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
     component: 'QQMailMessage',
     priority: 100,
     propsMapper: (_msg, ctx) => ({
-      showMediaResources: ctx.showMediaResources
-    })
+      showMediaResources: ctx.showMediaResources,
+    }),
   },
-  
+
   {
     type: MessageType.VoiceCall,
     name: '语音通话',
@@ -152,10 +153,10 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
     propsMapper: (msg, ctx) => ({
       content: msg.content,
       isSelf: msg.isSelf,
-      showMediaResources: ctx.showMediaResources
-    })
+      showMediaResources: ctx.showMediaResources,
+    }),
   },
-  
+
   // ==================== 富文本消息类型 (type=49) ====================
   {
     type: MessageType.File,
@@ -166,10 +167,10 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
     component: 'QQMusicMessage',
     priority: 90,
     propsMapper: (_msg, ctx) => ({
-      showMediaResources: ctx.showMediaResources
-    })
+      showMediaResources: ctx.showMediaResources,
+    }),
   },
-  
+
   {
     type: MessageType.File,
     subType: RichMessageSubType.VideoLink,
@@ -181,10 +182,10 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
     propsMapper: (_msg, ctx) => ({
       linkTitle: ctx.linkTitle,
       linkUrl: ctx.linkUrl,
-      showMediaResources: ctx.showMediaResources
-    })
+      showMediaResources: ctx.showMediaResources,
+    }),
   },
-  
+
   {
     type: MessageType.File,
     subType: RichMessageSubType.Link,
@@ -196,10 +197,10 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
     propsMapper: (_msg, ctx) => ({
       linkTitle: ctx.linkTitle,
       linkUrl: ctx.linkUrl,
-      showMediaResources: ctx.showMediaResources
-    })
+      showMediaResources: ctx.showMediaResources,
+    }),
   },
-  
+
   {
     type: MessageType.File,
     subType: RichMessageSubType.File,
@@ -213,10 +214,10 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
       fileName: ctx.fileName,
       fileSize: msg.fileSize,
       showMediaResources: ctx.showMediaResources,
-      md5: msg.contents?.md5
-    })
+      md5: msg.contents?.md5,
+    }),
   },
-  
+
   {
     type: MessageType.File,
     subType: RichMessageSubType.FileDownloading,
@@ -230,10 +231,10 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
       fileName: ctx.fileName,
       fileSize: msg.fileSize,
       showMediaResources: ctx.showMediaResources,
-      md5: msg.contents?.md5
-    })
+      md5: msg.contents?.md5,
+    }),
   },
-  
+
   {
     type: MessageType.File,
     subType: RichMessageSubType.EmojiNotDownloaded,
@@ -243,10 +244,10 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
     component: 'EmojiNotDownloadedMessage',
     priority: 90,
     propsMapper: (_msg, ctx) => ({
-      showMediaResources: ctx.showMediaResources
-    })
+      showMediaResources: ctx.showMediaResources,
+    }),
   },
-  
+
   {
     type: MessageType.File,
     subType: RichMessageSubType.CardPackage,
@@ -256,10 +257,10 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
     component: 'CardPackageMessage',
     priority: 90,
     propsMapper: (_msg, ctx) => ({
-      showMediaResources: ctx.showMediaResources
-    })
+      showMediaResources: ctx.showMediaResources,
+    }),
   },
-  
+
   {
     type: MessageType.File,
     subType: RichMessageSubType.Forwarded,
@@ -271,10 +272,10 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
     propsMapper: (_msg, ctx) => ({
       forwardedTitle: ctx.forwardedTitle,
       forwardedDesc: ctx.forwardedDesc,
-      forwardedCount: ctx.forwardedCount
-    })
+      forwardedCount: ctx.forwardedCount,
+    }),
   },
-  
+
   {
     type: MessageType.File,
     subType: RichMessageSubType.MiniProgram,
@@ -286,10 +287,10 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
     propsMapper: (_msg, ctx) => ({
       title: ctx.miniProgramTitle,
       url: ctx.miniProgramUrl,
-      showMediaResources: ctx.showMediaResources
-    })
+      showMediaResources: ctx.showMediaResources,
+    }),
   },
-  
+
   {
     type: MessageType.File,
     subType: RichMessageSubType.ShoppingMiniProgram,
@@ -303,10 +304,10 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
       url: ctx.shoppingMiniProgramUrl,
       desc: ctx.shoppingMiniProgramDesc,
       thumbUrl: ctx.shoppingMiniProgramThumb,
-      showMediaResources: ctx.showMediaResources
-    })
+      showMediaResources: ctx.showMediaResources,
+    }),
   },
-  
+
   {
     type: MessageType.File,
     subType: RichMessageSubType.ShortVideo,
@@ -318,10 +319,10 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
     propsMapper: (_msg, ctx) => ({
       title: ctx.shortVideoTitle,
       videoUrl: ctx.shortVideoUrl,
-      showMediaResources: ctx.showMediaResources
-    })
+      showMediaResources: ctx.showMediaResources,
+    }),
   },
-  
+
   {
     type: MessageType.File,
     subType: RichMessageSubType.Jielong,
@@ -333,10 +334,10 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
     propsMapper: (msg, ctx) => ({
       content: msg.content,
       contents: msg.contents,
-      showMediaResources: ctx.showMediaResources
-    })
+      showMediaResources: ctx.showMediaResources,
+    }),
   },
-  
+
   {
     type: MessageType.File,
     subType: RichMessageSubType.Pat,
@@ -347,10 +348,10 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
     priority: 95, // 拍一拍需要特殊渲染，优先级更高
     propsMapper: (msg, ctx) => ({
       content: msg.content,
-      showMediaResources: ctx.showMediaResources
-    })
+      showMediaResources: ctx.showMediaResources,
+    }),
   },
-  
+
   {
     type: MessageType.File,
     subType: RichMessageSubType.Live,
@@ -360,10 +361,10 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
     component: 'LiveMessage',
     priority: 90,
     propsMapper: (_msg, ctx) => ({
-      title: ctx.liveTitle
-    })
+      title: ctx.liveTitle,
+    }),
   },
-  
+
   {
     type: MessageType.File,
     subType: RichMessageSubType.Transfer,
@@ -374,10 +375,10 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
     priority: 90,
     propsMapper: (msg, ctx) => ({
       content: msg.content,
-      showMediaResources: ctx.showMediaResources
-    })
+      showMediaResources: ctx.showMediaResources,
+    }),
   },
-  
+
   {
     type: MessageType.File,
     subType: RichMessageSubType.RedPacket,
@@ -387,10 +388,10 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
     component: 'RedPacketMessage',
     priority: 90,
     propsMapper: (_msg, ctx) => ({
-      showMediaResources: ctx.showMediaResources
-    })
+      showMediaResources: ctx.showMediaResources,
+    }),
   },
-  
+
   {
     type: MessageType.File,
     subType: RichMessageSubType.Refer,
@@ -403,21 +404,24 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
       message: msg,
       referMessage: ctx.referMessage,
       referMessageType: ctx.referMessageType,
-      showMediaResources: ctx.showMediaResources
-    })
-  }
+      showMediaResources: ctx.showMediaResources,
+    }),
+  },
 ]
 
 /**
  * 根据消息类型和子类型查找配置
  */
-export function findMessageTypeConfig(type: number, subType?: number): MessageTypeConfig | undefined {
+export function findMessageTypeConfig(
+  type: number,
+  subType?: number
+): MessageTypeConfig | undefined {
   // 先查找精确匹配（type + subType）
   const exactMatch = MESSAGE_TYPE_CONFIGS.find(
     config => config.type === type && config.subType === subType
   )
   if (exactMatch) return exactMatch
-  
+
   // 如果没有精确匹配，查找只匹配 type 的配置
   const typeMatch = MESSAGE_TYPE_CONFIGS.find(
     config => config.type === type && config.subType === undefined
@@ -430,12 +434,16 @@ export function findMessageTypeConfig(type: number, subType?: number): MessageTy
  */
 export function getMessagePlaceholder(type: number, subType?: number, fileName?: string): string {
   const config = findMessageTypeConfig(type, subType)
-  
+
   // 文件类型特殊处理，包含文件名
-  if (type === MessageType.File && (subType === RichMessageSubType.File || subType === RichMessageSubType.FileDownloading) && fileName) {
+  if (
+    type === MessageType.File &&
+    (subType === RichMessageSubType.File || subType === RichMessageSubType.FileDownloading) &&
+    fileName
+  ) {
     return `[文件] ${fileName}`
   }
-  
+
   return config?.placeholder || '[未知消息]'
 }
 
@@ -461,9 +469,7 @@ export function getMessageTypeIcon(type: number, subType?: number): string {
 export function createTypeMap(): Record<string, string> {
   const map: Record<string, string> = {}
   MESSAGE_TYPE_CONFIGS.forEach(config => {
-    const key = config.subType !== undefined 
-      ? `${config.type}-${config.subType}` 
-      : `${config.type}`
+    const key = config.subType !== undefined ? `${config.type}-${config.subType}` : `${config.type}`
     map[key] = config.name
   })
   return map
@@ -475,9 +481,7 @@ export function createTypeMap(): Record<string, string> {
 export function createIconMap(): Record<string, string> {
   const map: Record<string, string> = {}
   MESSAGE_TYPE_CONFIGS.forEach(config => {
-    const key = config.subType !== undefined 
-      ? `${config.type}-${config.subType}` 
-      : `${config.type}`
+    const key = config.subType !== undefined ? `${config.type}-${config.subType}` : `${config.type}`
     map[key] = config.icon
   })
   return map

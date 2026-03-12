@@ -4,6 +4,7 @@ import type { Message } from '@/types'
 import { formatMessageTime } from '@/utils'
 import Avatar from '@/components/common/Avatar.vue'
 import { useAppStore } from '@/stores/app'
+import { useChatStore } from '@/stores/chat'
 import { mediaAPI } from '@/api/media'
 import { useMessageUrl } from './composables/useMessageUrl'
 import { useMessageType } from './composables/useMessageType'
@@ -31,6 +32,7 @@ const emit = defineEmits<{
 
 // 获取 app store
 const appStore = useAppStore()
+const chatStore = useChatStore()
 
 // 是否显示媒体资源
 const showMediaResources = computed(() => appStore.settings.showMediaResources)
@@ -52,8 +54,6 @@ const {
   isShoppingMiniProgramMessage,
   isShortVideoMessage,
   isLocationMessage,
-  isImageMessage,
-  isVideoMessage,
   referMessage,
   referMessageType,
   messageConfig,
@@ -61,6 +61,44 @@ const {
 
 // 使用 URL 处理逻辑
 const messageUrls = useMessageUrl(props.message)
+
+// 当前会话图片预览序列（用于串行浏览）
+const imagePreviewList = computed(() => {
+  const currentTalker = chatStore.currentTalker
+  if (!currentTalker || currentTalker !== props.message.talker) {
+    return []
+  }
+
+  return chatStore.imageMessages
+    .filter(msg => msg.talker === props.message.talker)
+    .map(msg => {
+      const thumbUrl = msg.content
+        ? msg.content
+        : msg.contents?.md5
+          ? mediaAPI.getThumbnailUrl(msg.contents.md5, msg.contents.path)
+          : ''
+      const imageUrl = msg.content
+        ? msg.content
+        : msg.contents?.md5
+          ? mediaAPI.getImageUrl(msg.contents.md5, msg.contents.path)
+          : ''
+
+      return {
+        imageUrl,
+        thumbUrl,
+      }
+    })
+    .filter(item => Boolean(item.imageUrl || item.thumbUrl))
+})
+
+const imagePreviewIndex = computed(() => {
+  const currentImageUrl = messageUrls.imageUrl.value
+  const currentThumbUrl = messageUrls.imageThumbUrl.value
+  const idx = imagePreviewList.value.findIndex(
+    item => item.imageUrl === currentImageUrl || item.thumbUrl === currentThumbUrl
+  )
+  return idx >= 0 ? idx : 0
+})
 
 // 格式化消息时间
 const messageTime = computed(() => {
@@ -166,6 +204,8 @@ const componentProps = computed(() => {
       locationX: messageUrls.locationX.value,
       locationY: messageUrls.locationY.value,
       locationCityname: messageUrls.locationCityname.value,
+      imagePreviewList: imagePreviewList.value,
+      imagePreviewIndex: imagePreviewIndex.value,
     }
 
     const mappedProps = config.propsMapper(props.message, context)
@@ -237,21 +277,8 @@ const handleLocationClick = () => {
   }
 }
 
-const handleImageClick = () => {
-  const imageUrl = messageUrls.imageUrl.value
-  if (imageUrl) {
-    window.open(imageUrl, '_blank')
-  }
-}
-
-const handleVideoClick = () => {
-  const videoUrl = messageUrls.videoUrl.value
-  if (videoUrl) {
-    window.open(videoUrl, '_blank')
-  }
-}
-
 const handleComponentClick = () => {
+  // 图片/视频点击由各自消息组件内部预览处理，这里只处理需要外链打开的类型
   if (isForwardedMessage.value) {
     handleForwardedClick()
   } else if (isFileMessage.value) {
@@ -266,10 +293,6 @@ const handleComponentClick = () => {
     handleShortVideoClick()
   } else if (isLocationMessage.value) {
     handleLocationClick()
-  } else if (isImageMessage.value) {
-    handleImageClick()
-  } else if (isVideoMessage.value) {
-    handleVideoClick()
   }
 }
 

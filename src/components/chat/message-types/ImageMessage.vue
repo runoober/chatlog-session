@@ -6,6 +6,11 @@ import ImageViewer from '@/components/common/ImageViewer.vue'
 interface Props {
   thumbUrl?: string
   imageUrl: string
+  imageList?: Array<{
+    imageUrl: string
+    thumbUrl?: string
+  }>
+  initialIndex?: number
   showMediaResources: boolean
   md5?: string
 }
@@ -68,7 +73,10 @@ const handleImageError = () => {
   <!-- 图片预览 -->
   <ImageViewer
     v-model:visible="showPreview"
+    :thumb-url="thumbUrl"
     :image-url="imageUrl"
+    :image-list="imageList"
+    :initial-index="initialIndex"
     title="图片预览"
   />
 </template>
