@@ -121,11 +121,14 @@ _基于 Chatlog API 的现代化微信聊天记录查看器_
 git clone https://github.com/xlight/chatlog-session.git
 cd chatlog-session
 
-# 2. 安装依赖
-npm install
+# 2. 启用 pnpm（若尚未启用）
+corepack enable
 
-# 3. 启动开发服务器
-npm run dev
+# 3. 安装依赖
+pnpm install
+
+# 4. 启动开发服务器
+pnpm dev
 # 访问 http://localhost:5173
 ```
 
@@ -146,7 +149,6 @@ npm run dev
 ## 🗺️ 路线图
 
 ### ✅ 已完成
-
 
 - [x] **v0.22.0**: Gap消息优化
 - [x] **v0.21.0**: 图片会话级串行预览、预览质量与高清加载状态指示、媒体点击行为收敛
