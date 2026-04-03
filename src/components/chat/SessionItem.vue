@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { ElMessageBox } from 'element-plus'
 import type { Session } from '@/types'
 import { formatSessionTime } from '@/utils'
-import { useDisplayName } from './composables'
+import { useSessionStore } from '@/stores/session'
+import { useContextMenu } from './composables'
 import Avatar from '@/components/common/Avatar.vue'
 
 interface Props {
@@ -11,32 +13,41 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  active: false
+  active: false,
 })
 
-// 定义 click 事件的 emit，当 SessionItem 被点击时：
-// 1. 模板中的 @click="handleClick" 触发 handleClick 方法
-// 2. handleClick 方法调用 emit('click', props.session)
-// 3. 将 click 事件和 session 数据传递给父组件
-// 4. 父组件通过 @click 监听器接收事件并执行相应的处理方法
 const emit = defineEmits<{
   click: [session: Session]
   action: [command: string, session: Session]
 }>()
 
-// 使用 displayName composable
-const { displayName } = useDisplayName({
-  id: computed(() => props.session.id),
-  defaultName: computed(() => props.session.name)
+const sessionStore = useSessionStore()
+const {
+  visible: contextMenuVisible,
+  x: contextMenuX,
+  y: contextMenuY,
+  open: openContextMenu,
+} = useContextMenu()
+
+const searchMetadata = computed(() => sessionStore.getSessionSearchMetadata(props.session))
+
+const displayName = computed(() => {
+  return (
+    searchMetadata.value?.displayName ||
+    props.session.remark ||
+    props.session.name ||
+    props.session.talkerName ||
+    props.session.talker
+  )
 })
 
-// 格式化最后消息时间
+const isSearchMode = computed(() => sessionStore.isSearchMode)
+
 const lastMessageTime = computed(() => {
   if (!props.session.lastMessage) return ''
   return formatSessionTime(props.session.lastMessage.createTime)
 })
 
-// 最后一条消息预览
 const lastMessagePreview = computed(() => {
   const msg = props.session.lastMessage
   if (!msg) return '[未知的消息类型]'
@@ -46,12 +57,10 @@ const lastMessagePreview = computed(() => {
   return msg.nickName ? `${msg.nickName}: ${content}` : content
 })
 
-// 会话类型图标
 const sessionTypeIcon = computed(() => {
   return props.session.type === 'group' ? 'User' : undefined
 })
 
-// 未读消息显示
 const unreadDisplay = computed(() => {
   const count = props.session.unreadCount || 0
   if (count === 0) return ''
@@ -59,93 +68,216 @@ const unreadDisplay = computed(() => {
   return count.toString()
 })
 
-// 是否显示未读红点
 const showUnreadBadge = computed(() => {
   return props.session.unreadCount && props.session.unreadCount > 0
 })
 
-// 处理点击
+const matchReasonLabel = computed(() => {
+  if (!isSearchMode.value || !searchMetadata.value?.matchedBy) {
+    return ''
+  }
+
+  switch (searchMetadata.value.matchedBy) {
+    case 'displayName':
+      return '显示名'
+    case 'remark':
+      return '备注名'
+    case 'nickname':
+      return '昵称'
+    case 'alias':
+      return '别名'
+    case 'talker':
+      return '微信号'
+    case 'message':
+      return '最近消息'
+    case 'pinyin':
+      return '拼音'
+    default:
+      return ''
+  }
+})
+
+const matchedSecondaryText = computed(() => {
+  if (!isSearchMode.value || !searchMetadata.value?.matchedBy) {
+    return ''
+  }
+
+  switch (searchMetadata.value.matchedBy) {
+    case 'remark':
+      return searchMetadata.value.remark
+    case 'nickname':
+      return searchMetadata.value.nickname
+    case 'alias':
+      return searchMetadata.value.alias
+    case 'talker':
+      return searchMetadata.value.talker
+    case 'message':
+      return searchMetadata.value.lastMessagePreview
+    default:
+      return ''
+  }
+})
+
+function buildHighlightedParts(text: string, keyword: string) {
+  if (!text || !keyword) {
+    return [{ text, matched: false }]
+  }
+
+  const normalizedText = text.toLowerCase()
+  const normalizedKeyword = keyword.trim().toLowerCase()
+  const start = normalizedText.indexOf(normalizedKeyword)
+
+  if (start === -1) {
+    return [{ text, matched: false }]
+  }
+
+  const end = start + normalizedKeyword.length
+  const parts = []
+
+  if (start > 0) {
+    parts.push({ text: text.slice(0, start), matched: false })
+  }
+
+  parts.push({ text: text.slice(start, end), matched: true })
+
+  if (end < text.length) {
+    parts.push({ text: text.slice(end), matched: false })
+  }
+
+  return parts
+}
+
+const displayNameParts = computed(() => {
+  const keyword = searchMetadata.value?.matchedBy === 'pinyin' ? '' : sessionStore.searchKeyword
+  return buildHighlightedParts(displayName.value, keyword)
+})
+
+const secondaryParts = computed(() => {
+  const keyword = searchMetadata.value?.matchedBy === 'pinyin' ? '' : sessionStore.searchKeyword
+  return buildHighlightedParts(matchedSecondaryText.value, keyword)
+})
+
 const handleClick = () => {
   emit('click', props.session)
 }
 
-// 处理菜单命令
-const handleCommand = (command: string) => {
+const handleCommand = async (command: string) => {
+  if (command === 'delete') {
+    try {
+      await ElMessageBox.confirm('确定要从列表中移除该会话吗？', '移除会话', {
+        confirmButtonText: '移除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      })
+    } catch {
+      return
+    }
+  }
+
   emit('action', command, props.session)
 }
 </script>
 
 <template>
-  <el-dropdown
-    trigger="contextmenu"
-    placement="bottom-start"
-    class="session-item-dropdown"
-    @command="handleCommand"
-  >
+  <div class="session-item-dropdown" @contextmenu="openContextMenu">
     <div
       class="session-item"
       :class="{
         'session-item--active': active,
         'session-item--pinned': session.isPinned || session.isLocalPinned,
-        'session-item--minimized': session.isMinimized
+        'session-item--minimized': session.isMinimized,
       }"
       @click="handleClick"
     >
-      <!-- 头像 -->
-    <div class="session-item__avatar">
-      <Avatar
-        :src="session.avatar"
-        :name="session.name"
-        :size="48"
-        :icon="sessionTypeIcon"
-      />
-      <el-badge
-        v-if="showUnreadBadge"
-        :value="unreadDisplay"
-        :max="99"
-        class="session-item__badge"
-      />
-    </div>
-
-    <!-- 会话信息 -->
-    <div class="session-item__content">
-      <div class="session-item__header">
-        <div class="session-item__name">
-          <el-icon v-if="session.isPinned" size="14" class="pin-icon">
-            <Paperclip />
-          </el-icon>
-          <el-icon v-if="session.isMinimized" size="14" class="minimized-icon">
-            <Minus />
-          </el-icon>
-          <span class="name-text ellipsis">{{ displayName }}</span>
-        </div>
-        <span class="session-item__time">{{ lastMessageTime }}</span>
+      <div class="session-item__avatar">
+        <Avatar :src="session.avatar" :name="displayName" :size="48" :icon="sessionTypeIcon" />
+        <el-badge
+          v-if="showUnreadBadge"
+          :value="unreadDisplay"
+          :max="99"
+          class="session-item__badge"
+        />
       </div>
 
-      <div class="session-item__footer">
-        <div class="session-item__message ellipsis">
-          {{ lastMessagePreview }}
+      <div class="session-item__content">
+        <div class="session-item__header">
+          <div class="session-item__name">
+            <el-icon v-if="session.isPinned" size="14" class="pin-icon">
+              <Paperclip />
+            </el-icon>
+            <el-icon v-if="session.isMinimized" size="14" class="minimized-icon">
+              <Minus />
+            </el-icon>
+            <span class="name-text ellipsis">
+              <template
+                v-for="(part, index) in displayNameParts"
+                :key="`${session.id}-name-${index}`"
+              >
+                <mark v-if="part.matched" class="match-highlight">{{ part.text }}</mark>
+                <span v-else>{{ part.text }}</span>
+              </template>
+            </span>
+          </div>
+          <span class="session-item__time">{{ lastMessageTime }}</span>
+        </div>
+
+        <div class="session-item__footer">
+          <div v-if="matchReasonLabel" class="session-item__match">
+            <el-tag size="small" type="primary" effect="plain">命中{{ matchReasonLabel }}</el-tag>
+            <span v-if="matchedSecondaryText" class="match-text ellipsis">
+              <template
+                v-for="(part, index) in secondaryParts"
+                :key="`${session.id}-match-${index}`"
+              >
+                <mark v-if="part.matched" class="match-highlight">{{ part.text }}</mark>
+                <span v-else>{{ part.text }}</span>
+              </template>
+            </span>
+          </div>
+          <div class="session-item__message ellipsis">
+            {{ lastMessagePreview }}
+          </div>
         </div>
       </div>
     </div>
+  </div>
+
+  <Teleport to="body">
+    <div
+      v-if="contextMenuVisible"
+      class="session-item-context-menu"
+      :style="{
+        left: `${contextMenuX}px`,
+        top: `${contextMenuY}px`,
+      }"
+    >
+      <button
+        class="context-menu-item"
+        type="button"
+        @click="handleCommand(session.isLocalPinned ? 'unpin' : 'pin')"
+      >
+        <el-icon><Paperclip /></el-icon>
+        <span>{{ session.isLocalPinned ? '取消置顶' : '置顶会话' }}</span>
+      </button>
+      <button
+        class="context-menu-item"
+        type="button"
+        @click="handleCommand(session.unreadCount && session.unreadCount > 0 ? 'read' : 'unread')"
+      >
+        <el-icon><ChatDotRound /></el-icon>
+        <span>{{ session.unreadCount && session.unreadCount > 0 ? '标记已读' : '标记未读' }}</span>
+      </button>
+      <div class="context-menu-divider" />
+      <button
+        class="context-menu-item context-menu-item--danger"
+        type="button"
+        @click="handleCommand('delete')"
+      >
+        <el-icon><Delete /></el-icon>
+        <span>删除会话</span>
+      </button>
     </div>
-    <template #dropdown>
-      <el-dropdown-menu>
-        <el-dropdown-item :command="session.isLocalPinned ? 'unpin' : 'pin'">
-          <el-icon><Paperclip /></el-icon>
-          {{ session.isLocalPinned ? '取消置顶' : '置顶会话' }}
-        </el-dropdown-item>
-        <el-dropdown-item :command="session.unreadCount && session.unreadCount > 0 ? 'read' : 'unread'">
-          <el-icon><ChatDotRound /></el-icon>
-          {{ session.unreadCount && session.unreadCount > 0 ? '标记已读' : '标记未读' }}
-        </el-dropdown-item>
-        <el-dropdown-item divided command="delete">
-          <el-icon style="color: var(--el-color-danger)"><Delete /></el-icon>
-          <span style="color: var(--el-color-danger)">删除会话</span>
-        </el-dropdown-item>
-      </el-dropdown-menu>
-    </template>
-  </el-dropdown>
+  </Teleport>
 </template>
 
 <style lang="scss" scoped>
@@ -243,7 +375,9 @@ const handleCommand = (command: string) => {
 
   &__footer {
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
   }
 
   &__message {
@@ -251,9 +385,68 @@ const handleCommand = (command: string) => {
     color: var(--el-text-color-regular);
     line-height: 1.4;
   }
+
+  &__match {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+
+    .match-text {
+      min-width: 0;
+      font-size: 12px;
+      color: var(--el-color-primary);
+    }
+  }
 }
 
-// 暗色模式适配
+.match-highlight {
+  padding: 0;
+  color: inherit;
+  background-color: rgba(64, 158, 255, 0.16);
+  border-radius: 2px;
+}
+
+:global(.session-item-context-menu) {
+  position: fixed;
+  z-index: 3000;
+  min-width: 160px;
+  padding: 6px;
+  background-color: var(--el-bg-color-overlay);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 10px;
+  box-shadow: var(--el-box-shadow-light);
+}
+
+:global(.context-menu-item) {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--el-text-color-primary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+:global(.context-menu-item:hover) {
+  background-color: var(--el-fill-color-light);
+}
+
+:global(.context-menu-item--danger) {
+  color: var(--el-color-danger);
+}
+
+:global(.context-menu-divider) {
+  height: 1px;
+  margin: 6px 4px;
+  background-color: var(--el-border-color-lighter);
+}
+
 .dark-mode {
   .session-item {
     &--active {

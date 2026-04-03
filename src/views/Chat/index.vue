@@ -237,7 +237,7 @@ onUnmounted(() => {
           <!-- 搜索框 -->
           <el-input
             v-model="searchText"
-            placeholder="搜索会话"
+            placeholder="搜索会话、备注、群名、微信号、最近消息"
             prefix-icon="Search"
             clearable
             size="small"

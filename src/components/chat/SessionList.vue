@@ -15,7 +15,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   searchText: '',
-  filterType: 'all'
+  filterType: 'all',
 })
 
 const emit = defineEmits<{
@@ -33,18 +33,38 @@ const silentRefreshing = ref(false)
 // 置顶会话折叠状态
 const isPinnedCollapsed = ref(false)
 
-
 // 同步 props 到 store
-watch(() => props.filterType, (val) => {
-  sessionStore.setFilterType(val)
-}, { immediate: true })
+watch(
+  () => props.filterType,
+  val => {
+    sessionStore.setFilterType(val)
+  },
+  { immediate: true }
+)
 
-watch(() => props.searchText, (val) => {
-  sessionStore.setSearchKeyword(val)
-}, { immediate: true })
+watch(
+  () => props.searchText,
+  val => {
+    sessionStore.setSearchKeyword(val)
+  },
+  { immediate: true }
+)
 
 // 直接使用 store 的计算属性和状态
 const sessionList = computed(() => sessionStore.filteredSessions)
+const isSearchMode = computed(() => sessionStore.isSearchMode)
+const currentSessionFilteredOut = computed(() => {
+  if (!isSearchMode.value || !sessionStore.currentSessionId) {
+    return false
+  }
+
+  return !sessionList.value.some(session => {
+    return (
+      session.id === sessionStore.currentSessionId ||
+      session.talker === sessionStore.currentSessionId
+    )
+  })
+})
 
 // 加载会话列表（首次加载，显示 loading）
 const loadSessions = async () => {
@@ -109,15 +129,11 @@ const handleSessionAction = async (command: string, session: Session) => {
       break
     case 'delete':
       try {
-        await ElMessageBox.confirm(
-          '确定要从列表中移除该会话吗？',
-          '移除会话',
-          {
-            confirmButtonText: '移除',
-            cancelButtonText: '取消',
-            type: 'warning'
-          }
-        )
+        await ElMessageBox.confirm('确定要从列表中移除该会话吗？', '移除会话', {
+          confirmButtonText: '移除',
+          cancelButtonText: '取消',
+          type: 'warning',
+        })
         sessionStore.deleteSession(session.talker)
         ElMessage.success('会话已移除')
       } catch {
@@ -162,7 +178,7 @@ const autoRefresh = async () => {
       if (appStore.isDebug && needsRefreshCount > 0) {
         ElMessage.info({
           message: `正在后台刷新 ${needsRefreshCount} 个会话的消息...`,
-          duration: 2000
+          duration: 2000,
         })
       }
     } catch (error) {
@@ -193,7 +209,7 @@ defineExpose({
   refresh: handleRefresh,
   silentRefresh,
   loadSessions,
-  autoRefresh
+  autoRefresh,
 })
 </script>
 
@@ -258,15 +274,13 @@ defineExpose({
             检查 API 设置
           </el-button>
         </div>
-        <p class="error-tip">
-          请确认 API 地址配置正确，并且服务正常运行
-        </p>
+        <p class="error-tip">请确认 API 地址配置正确，并且服务正常运行</p>
       </el-empty>
     </div>
 
     <!-- 空状态 -->
     <div v-else-if="sessionList.length === 0" class="session-list__empty">
-      <el-empty :description="sessionStore.searchKeyword ? '未找到匹配的会话' : '暂无会话'">
+      <el-empty :description="sessionStore.searchKeyword ? '没有找到匹配的会话' : '暂无会话'">
         <template #image>
           <el-icon size="48" color="var(--el-text-color-secondary)">
             <ChatLineSquare />
@@ -276,54 +290,99 @@ defineExpose({
           <p>请确保 Chatlog API 服务正在运行</p>
           <p class="text-secondary">默认地址: http://127.0.0.1:5030</p>
         </div>
+        <div v-else class="empty-tip">
+          <p>可尝试搜索备注、昵称、群名、微信号或最近一条消息内容</p>
+          <p v-if="sessionStore.searchIndexIncomplete" class="text-secondary">
+            联系人信息仍在后台加载，部分结果可能稍后出现
+          </p>
+        </div>
       </el-empty>
     </div>
 
     <!-- 会话列表 -->
     <div v-else class="session-list__content">
-      <!-- 置顶会话 -->
-      <div v-if="sessionStore.pinnedSessions.length > 0" class="session-group">
-        <div class="session-group__header clickable" @click="isPinnedCollapsed = !isPinnedCollapsed">
-          <div class="header-left">
-            <el-icon class="collapse-icon" :class="{ 'is-collapsed': isPinnedCollapsed }">
-              <CaretBottom />
-            </el-icon>
-            <span>置顶会话</span>
+      <div v-if="isSearchMode" class="session-list__search-meta">
+        <span>匹配到 {{ sessionStore.searchResultCount }} 个会话</span>
+        <span v-if="sessionStore.searchIndexIncomplete" class="text-secondary">
+          联系人信息仍在后台加载，结果可能继续补全
+        </span>
+      </div>
+
+      <div v-if="currentSessionFilteredOut" class="session-list__search-tip">
+        当前会话未匹配本次搜索，右侧消息仍保持打开
+      </div>
+
+      <template v-if="isSearchMode">
+        <SessionItem
+          v-for="session in sessionList"
+          :key="session.id"
+          :session="session"
+          :active="
+            session.id === sessionStore.currentSessionId ||
+            session.talker === sessionStore.currentSessionId
+          "
+          @click="handleSelectSession"
+          @action="handleSessionAction"
+        />
+      </template>
+
+      <template v-else>
+        <!-- 置顶会话 -->
+        <div v-if="sessionStore.pinnedSessions.length > 0" class="session-group">
+          <div
+            class="session-group__header clickable"
+            @click="isPinnedCollapsed = !isPinnedCollapsed"
+          >
+            <div class="header-left">
+              <el-icon class="collapse-icon" :class="{ 'is-collapsed': isPinnedCollapsed }">
+                <CaretBottom />
+              </el-icon>
+              <span>置顶会话</span>
+            </div>
+            <el-tag size="small" type="warning">{{ sessionStore.pinnedSessions.length }}</el-tag>
           </div>
-          <el-tag size="small" type="warning">{{ sessionStore.pinnedSessions.length }}</el-tag>
+          <div v-show="!isPinnedCollapsed">
+            <SessionItem
+              v-for="session in sessionStore.pinnedSessions"
+              :key="session.id"
+              :session="session"
+              :active="
+                session.id === sessionStore.currentSessionId ||
+                session.talker === sessionStore.currentSessionId
+              "
+              @click="handleSelectSession"
+              @action="handleSessionAction"
+            />
+          </div>
         </div>
-        <div v-show="!isPinnedCollapsed">
+
+        <!-- 普通会话 -->
+        <div v-if="sessionStore.unpinnedSessions.length > 0" class="session-group">
+          <div v-if="sessionStore.pinnedSessions.length > 0" class="session-group__header">
+            <span>全部会话</span>
+            <el-tag size="small">{{ sessionStore.unpinnedSessions.length }}</el-tag>
+          </div>
           <SessionItem
-            v-for="session in sessionStore.pinnedSessions"
+            v-for="session in sessionStore.unpinnedSessions"
             :key="session.id"
             :session="session"
-            :active="session.id === sessionStore.currentSessionId"
+            :active="
+              session.id === sessionStore.currentSessionId ||
+              session.talker === sessionStore.currentSessionId
+            "
             @click="handleSelectSession"
             @action="handleSessionAction"
           />
         </div>
-      </div>
-
-      <!-- 普通会话 -->
-      <div v-if="sessionStore.unpinnedSessions.length > 0" class="session-group">
-        <div v-if="sessionStore.pinnedSessions.length > 0" class="session-group__header">
-          <span>全部会话</span>
-          <el-tag size="small">{{ sessionStore.unpinnedSessions.length }}</el-tag>
-        </div>
-        <SessionItem
-          v-for="session in sessionStore.unpinnedSessions"
-          :key="session.id"
-          :session="session"
-          :active="session.id === sessionStore.currentSessionId"
-          @click="handleSelectSession"
-          @action="handleSessionAction"
-        />
-      </div>
+      </template>
 
       <!-- 统计信息 -->
       <div class="session-list__footer">
         <span class="text-secondary">
-          共 {{ sessionStore.filteredSessions.length }} 个会话
+          <template v-if="isSearchMode">
+            搜索结果 {{ sessionStore.searchResultCount }} 个
+          </template>
+          <template v-else> 共 {{ sessionStore.filteredSessions.length }} 个会话 </template>
           <template v-if="sessionStore.totalUnreadCount > 0">
             · {{ sessionStore.totalUnreadCount }} 条未读
           </template>
@@ -406,6 +465,26 @@ defineExpose({
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
+  }
+
+  &__search-meta,
+  &__search-tip {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 16px;
+    font-size: 12px;
+    border-bottom: 1px solid var(--el-border-color-lighter);
+  }
+
+  &__search-meta {
+    color: var(--el-text-color-regular);
+    background-color: var(--el-fill-color-lighter);
+  }
+
+  &__search-tip {
+    color: var(--el-color-warning);
+    background-color: rgba(230, 162, 60, 0.08);
   }
 
   &__footer {
@@ -494,12 +573,12 @@ defineExpose({
 }
 
 @keyframes rotating {
-from {
-  transform: rotate(0deg);
-}
-to {
-  transform: rotate(360deg);
-}
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .dark-mode {

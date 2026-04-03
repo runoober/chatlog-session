@@ -7,10 +7,14 @@ import { sessionAPI } from '@/api'
 import type { Session } from '@/types/session'
 import type { SessionParams } from '@/types/api'
 import type { SessionFilterType } from '@/types'
+import type { Contact } from '@/types/contact'
 import { useAppStore } from './app'
+import { useContactStore } from './contact'
+import { useSessionSearch } from './sessionSearch'
 
 export const useSessionStore = defineStore('session', () => {
   const appStore = useAppStore()
+  const contactStore = useContactStore()
 
   // ==================== State ====================
 
@@ -99,6 +103,28 @@ export const useSessionStore = defineStore('session', () => {
    */
   const error = ref<Error | null>(null)
 
+  // ==================== Search Module ====================
+
+  const contactMap = computed(() => {
+    const map = new Map<string, Contact>()
+    contactStore.contacts.forEach(contact => {
+      map.set(contact.wxid, contact)
+    })
+    return map
+  })
+
+  const disableServerPinning = computed(() => appStore.settings.disableServerPinning)
+
+  const search = useSessionSearch({
+    sessions,
+    searchKeyword,
+    filterType,
+    sortBy,
+    sortOrder,
+    contactMap,
+    disableServerPinning,
+  })
+
   // ==================== Getters ====================
 
   /**
@@ -112,59 +138,33 @@ export const useSessionStore = defineStore('session', () => {
    * 筛选后的会话列表
    */
   const filteredSessions = computed(() => {
-    let result = sessions.value
+    let result = search.applySessionTypeFilter(sessions.value)
 
-    // 按类型筛选
-    if (filterType.value !== 'all') {
-      if (filterType.value === 'chat') {
-        result = result.filter(s => s.type === 'private' || s.type === 'group')
-      } else {
-        result = result.filter(s => s.type === filterType.value)
-      }
+    if (!search.searchKeywordNormalized.value) {
+      return [...result].sort(search.compareSessionsBase)
     }
 
-    // 搜索筛选
-    if (searchKeyword.value) {
-      const keyword = searchKeyword.value.toLowerCase()
-      result = result.filter(s => {
-        const name = (s.name || '').toLowerCase()
-        const remark = (s.remark || '').toLowerCase()
-        return name.includes(keyword) || remark.includes(keyword)
+    result = result
+      .map(session => ({
+        session,
+        metadata: search.searchMatchesMap.value.get(session.talker),
+      }))
+      .filter(item => !!item.metadata)
+      .sort((a, b) => {
+        const scoreDiff = (b.metadata?.matchScore || 0) - (a.metadata?.matchScore || 0)
+        if (scoreDiff !== 0) {
+          return scoreDiff
+        }
+
+        return search.compareSessionsBase(a.session, b.session)
       })
-    }
-
-    // 排序
-    result = [...result].sort((a, b) => {
-      // 1. 本地置顶优先
-      const aLocal = a.isLocalPinned ? 1 : 0
-      const bLocal = b.isLocalPinned ? 1 : 0
-      if (aLocal !== bLocal) return bLocal - aLocal
-
-      // 2. 服务端置顶（如果未禁用）
-      if (!appStore.settings.disableServerPinning) {
-        const aPinned = a.isPinned ? 1 : 0
-        const bPinned = b.isPinned ? 1 : 0
-        if (aPinned !== bPinned) return bPinned - aPinned
-      }
-
-      let compareValue = 0
-
-      switch (sortBy.value) {
-        case 'time':
-          compareValue = (a.lastMessage?.createTime || 0) - (b.lastMessage?.createTime || 0)
-          break
-        case 'name':
-          compareValue = (a.name || a.talker).localeCompare(b.name || b.talker, 'zh-CN')
-          break
-        case 'unread':
-          compareValue = (a.unreadCount || 0) - (b.unreadCount || 0)
-          break
-      }
-
-      return sortOrder.value === 'desc' ? -compareValue : compareValue
-    })
+      .map(item => item.session)
 
     return result
+  })
+
+  const searchResultCount = computed(() => {
+    return search.isSearchMode.value ? filteredSessions.value.length : 0
   })
 
   /**
@@ -172,7 +172,7 @@ export const useSessionStore = defineStore('session', () => {
    */
   const pinnedSessions = computed(() => {
     return filteredSessions.value.filter(
-      s => s.isLocalPinned || (!appStore.settings.disableServerPinning && s.isPinned),
+      s => s.isLocalPinned || (!appStore.settings.disableServerPinning && s.isPinned)
     )
   })
 
@@ -181,7 +181,7 @@ export const useSessionStore = defineStore('session', () => {
    */
   const unpinnedSessions = computed(() => {
     return filteredSessions.value.filter(
-      s => !(s.isLocalPinned || (!appStore.settings.disableServerPinning && s.isPinned)),
+      s => !(s.isLocalPinned || (!appStore.settings.disableServerPinning && s.isPinned))
     )
   })
 
@@ -226,6 +226,7 @@ export const useSessionStore = defineStore('session', () => {
   const unknownSessions = computed(() => {
     return sessions.value.filter(s => s.type === 'unknown')
   })
+
   /**
    * 是否有会话
    */
@@ -282,6 +283,10 @@ export const useSessionStore = defineStore('session', () => {
       } else {
         sessions.value = items
       }
+
+      search.hydrateSearchContacts(items).catch(err => {
+        console.warn('补全会话搜索索引失败:', err)
+      })
 
       totalSessions.value = total
       hasMore.value = items.length >= pageSize.value
@@ -345,6 +350,10 @@ export const useSessionStore = defineStore('session', () => {
       } else {
         sessions.value.unshift(session)
       }
+
+      search.hydrateSearchContacts([session]).catch(err => {
+        console.warn('补全会话搜索索引失败:', err)
+      })
 
       return session
     } catch (err) {
@@ -584,6 +593,7 @@ export const useSessionStore = defineStore('session', () => {
     sortOrder.value = 'desc'
     loading.value = false
     error.value = null
+    search.$reset()
   }
 
   // ==================== Return ====================
@@ -617,6 +627,10 @@ export const useSessionStore = defineStore('session', () => {
     hasSessions,
     hasCurrentSession,
     sessionStats,
+    isSearchMode: search.isSearchMode,
+    searchResultCount,
+    searchIndexIncomplete: search.searchIndexIncomplete,
+    getSessionSearchMetadata: search.getSessionSearchMetadata,
 
     // Actions
     loadSessions,
