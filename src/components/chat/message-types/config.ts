@@ -278,6 +278,23 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
 
   {
     type: MessageType.File,
+    subType: RichMessageSubType.Favorite,
+    name: '收藏',
+    icon: 'Star',
+    placeholder: '[收藏]',
+    component: 'FavoriteMessage',
+    priority: 90,
+    propsMapper: (_msg, ctx) => ({
+      favoriteTitle: ctx.favoriteTitle,
+      favoriteDesc: ctx.favoriteDesc,
+      favoriteCount: ctx.favoriteCount,
+      favoriteTypes: ctx.favoriteTypes,
+      showMediaResources: ctx.showMediaResources,
+    }),
+  },
+
+  {
+    type: MessageType.File,
     subType: RichMessageSubType.MiniProgram,
     name: '小程序',
     icon: 'Grid',
@@ -405,6 +422,18 @@ export const MESSAGE_TYPE_CONFIGS: MessageTypeConfig[] = [
       referMessage: ctx.referMessage,
       referMessageType: ctx.referMessageType,
       showMediaResources: ctx.showMediaResources,
+    }),
+  },
+
+  {
+    type: MessageType.File,
+    name: '富文本消息',
+    icon: 'DocumentCopy',
+    placeholder: '[富文本消息]',
+    component: 'TextMessage',
+    priority: 10,
+    propsMapper: msg => ({
+      content: msg.content || `[富文本消息] subType=${msg.subType}`,
     }),
   },
 ]

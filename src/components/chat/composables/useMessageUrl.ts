@@ -3,6 +3,73 @@ import type { Message } from '@/types'
 import { RichMessageSubType } from '@/types/message'
 import { mediaAPI } from '@/api/media'
 
+interface FavoriteDataItem {
+  DataType: string
+  DataFmt?: string
+  DataDesc?: string
+  DataTitle?: string
+  HTMLID?: string
+}
+
+function getFavoriteDataItems(message: Message): FavoriteDataItem[] {
+  const dataItems = message.contents?.recordInfo?.DataList?.DataItems
+  if (!Array.isArray(dataItems)) return []
+  return dataItems.filter(item => item?.DataType)
+}
+
+function normalizeFavoriteText(text?: string): string {
+  if (!text) return ''
+  return text.replace(/\s+/g, ' ').trim()
+}
+
+function getFavoriteTypeLabel(item: FavoriteDataItem): string | null {
+  if (item.DataType === '1') return '文本'
+  if (item.DataType === '2' || item.DataType === '3') return '图片'
+  if (item.DataType === '34') return '语音'
+  if (item.DataType === '4' || item.DataType === '5' || item.DataType === '43') return '视频'
+  if (item.DataType === '6' || item.DataType === '48') return '位置'
+  if (item.DataType === '8') {
+    if (item.DataFmt === 'htm' || item.HTMLID === 'WeNoteHtmlFile') return '笔记'
+    return '文件'
+  }
+  return null
+}
+
+function buildFavoriteSummary(message: Message) {
+  const dataItems = getFavoriteDataItems(message)
+  const countValue = message.contents?.recordInfo?.DataList?.Count
+  const favoriteCount = countValue ? parseInt(countValue) : dataItems.length
+  const favoriteTitle = message.contents?.recordInfo?.Title || message.contents?.title || '收藏内容'
+
+  const firstTextItem = dataItems.find(
+    item => item.DataType === '1' && normalizeFavoriteText(item.DataDesc)
+  )
+  const firstText = normalizeFavoriteText(firstTextItem?.DataDesc)
+
+  const typeSet = new Set<string>()
+  dataItems.forEach(item => {
+    const label = getFavoriteTypeLabel(item)
+    if (label) {
+      typeSet.add(label)
+    }
+  })
+
+  const favoriteTypes = Array.from(typeSet).slice(0, 3)
+  const typeHint = favoriteTypes.length > 0 ? favoriteTypes.join(' / ') : '多种内容'
+  const favoriteDesc =
+    normalizeFavoriteText(message.contents?.desc) ||
+    firstText ||
+    `包含 ${favoriteCount || dataItems.length} 项内容，以${typeHint}为主`
+
+  return {
+    favoriteTitle,
+    favoriteDesc,
+    favoriteCount,
+    favoriteTypes,
+    favoriteItems: dataItems,
+  }
+}
+
 const PROXY_BASE = 'https://spmc.sponeur.com/proxy'
 const ALLOWED_DOMAINS = [
   'vweixinf.tc.qq.com',
@@ -116,6 +183,14 @@ export function useMessageUrl(message: Message) {
     return count ? parseInt(count) : 0
   })
 
+  // 收藏消息相关
+  const favoriteSummary = computed(() => buildFavoriteSummary(message))
+  const favoriteTitle = computed(() => favoriteSummary.value.favoriteTitle)
+  const favoriteDesc = computed(() => favoriteSummary.value.favoriteDesc)
+  const favoriteCount = computed(() => favoriteSummary.value.favoriteCount)
+  const favoriteTypes = computed(() => favoriteSummary.value.favoriteTypes)
+  const favoriteItems = computed(() => favoriteSummary.value.favoriteItems)
+
   // 小程序相关
   const miniProgramTitle = computed(() => message.contents?.title || '小程序')
   const miniProgramUrl = computed(() => message.contents?.url || '')
@@ -154,6 +229,11 @@ export function useMessageUrl(message: Message) {
     forwardedTitle,
     forwardedDesc,
     forwardedCount,
+    favoriteTitle,
+    favoriteDesc,
+    favoriteCount,
+    favoriteTypes,
+    favoriteItems,
     miniProgramTitle,
     miniProgramUrl,
     shoppingMiniProgramTitle,

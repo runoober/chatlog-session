@@ -15,14 +15,14 @@ export function validateComponentRegistry() {
 
   MESSAGE_TYPE_CONFIGS.forEach(config => {
     const componentName = config.component
-    
+
     // 检查组件是否在注册表中
     if (!MESSAGE_COMPONENT_REGISTRY[componentName]) {
       errors.push(
         `组件 "${componentName}" 在配置中使用但未在 registry.ts 中注册 (type=${config.type}, subType=${config.subType})`
       )
     }
-    
+
     // 检查必填字段
     if (!config.name) {
       warnings.push(`配置缺少 name 字段: ${componentName}`)
@@ -47,6 +47,7 @@ export function validateConfigLookup() {
     { type: 3, subType: undefined, expectedName: '图片' },
     { type: 49, subType: 8, expectedName: '表情包(未下载)' },
     { type: 49, subType: 5, expectedName: '链接' },
+    { type: 49, subType: 24, expectedName: '收藏' },
     { type: 49, subType: 57, expectedName: '引用消息' },
   ]
 
@@ -59,7 +60,7 @@ export function validateConfigLookup() {
     } else if (config.name !== expectedName) {
       errors.push(
         `配置名称不匹配: type=${type}, subType=${subType}, ` +
-        `expected="${expectedName}", got="${config.name}"`
+          `expected="${expectedName}", got="${config.name}"`
       )
     }
   })
@@ -75,10 +76,8 @@ export function validateDuplicateConfigs() {
   const duplicates: string[] = []
 
   MESSAGE_TYPE_CONFIGS.forEach(config => {
-    const key = config.subType !== undefined 
-      ? `${config.type}-${config.subType}` 
-      : `${config.type}`
-    
+    const key = config.subType !== undefined ? `${config.type}-${config.subType}` : `${config.type}`
+
     if (seen.has(key)) {
       duplicates.push(`重复配置: type=${config.type}, subType=${config.subType}`)
     }
@@ -132,7 +131,7 @@ export function runAllValidations() {
   console.log('\n📊 统计信息:')
   console.log(`  - 配置总数: ${MESSAGE_TYPE_CONFIGS.length}`)
   console.log(`  - 注册组件数: ${Object.keys(MESSAGE_COMPONENT_REGISTRY).length}`)
-  
+
   const basicTypes = MESSAGE_TYPE_CONFIGS.filter(c => c.subType === undefined)
   const richTypes = MESSAGE_TYPE_CONFIGS.filter(c => c.subType !== undefined)
   console.log(`  - 基础消息类型: ${basicTypes.length}`)
@@ -141,18 +140,16 @@ export function runAllValidations() {
   console.groupEnd()
 
   // 返回总体结果
-  const hasErrors = 
+  const hasErrors =
     registryResult.errors.length > 0 ||
     lookupResult.errors.length > 0 ||
     duplicateResult.duplicates.length > 0
 
   return {
     success: !hasErrors,
-    totalErrors: 
-      registryResult.errors.length +
-      lookupResult.errors.length +
-      duplicateResult.duplicates.length,
-    totalWarnings: registryResult.warnings.length
+    totalErrors:
+      registryResult.errors.length + lookupResult.errors.length + duplicateResult.duplicates.length,
+    totalWarnings: registryResult.warnings.length,
   }
 }
 

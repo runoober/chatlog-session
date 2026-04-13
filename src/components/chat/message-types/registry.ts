@@ -15,6 +15,7 @@ import PatMessage from './PatMessage.vue'
 import LiveMessage from './LiveMessage.vue'
 import JielongMessage from './JielongMessage.vue'
 import ForwardedMessage from './ForwardedMessage.vue'
+import FavoriteMessage from './FavoriteMessage.vue'
 import RedPacketMessage from './RedPacketMessage.vue'
 import LocationMessage from './LocationMessage.vue'
 import ContactCardMessage from './ContactCardMessage.vue'
@@ -45,6 +46,7 @@ export const MESSAGE_COMPONENT_REGISTRY: Record<string, Component> = {
   LiveMessage,
   JielongMessage,
   ForwardedMessage,
+  FavoriteMessage,
   RedPacketMessage,
   LocationMessage,
   ContactCardMessage,

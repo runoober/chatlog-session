@@ -11,6 +11,7 @@ import { useMessageType } from './composables/useMessageType'
 import { MoreFilled } from '@element-plus/icons-vue'
 import { MESSAGE_COMPONENT_REGISTRY } from './message-types/registry'
 import ForwardedDialog from './message-types/ForwardedDialog.vue'
+import FavoriteDialog from './message-types/FavoriteDialog.vue'
 
 interface Props {
   message: Message
@@ -48,6 +49,7 @@ const {
   isEmptyRangeMessage,
   isPatMessage,
   isForwardedMessage,
+  isFavoriteMessage,
   isFileMessage,
   isLinkMessage,
   isMiniProgramMessage,
@@ -191,6 +193,11 @@ const componentProps = computed(() => {
       forwardedTitle: messageUrls.forwardedTitle.value,
       forwardedDesc: messageUrls.forwardedDesc.value,
       forwardedCount: messageUrls.forwardedCount.value,
+      favoriteTitle: messageUrls.favoriteTitle.value,
+      favoriteDesc: messageUrls.favoriteDesc.value,
+      favoriteCount: messageUrls.favoriteCount.value,
+      favoriteTypes: messageUrls.favoriteTypes.value,
+      favoriteItems: messageUrls.favoriteItems.value,
       miniProgramTitle: messageUrls.miniProgramTitle.value,
       miniProgramUrl: messageUrls.miniProgramUrl.value,
       shoppingMiniProgramTitle: messageUrls.shoppingMiniProgramTitle.value,
@@ -223,10 +230,12 @@ const componentProps = computed(() => {
 
 // ==================== 事件处理 ====================
 const forwardedDialogVisible = ref(false)
+const favoriteDialogVisible = ref(false)
 const forwardedMessages = computed(() => {
   const dataItems = props.message.contents?.recordInfo?.DataList?.DataItems || []
   return dataItems
 })
+const favoriteMessages = computed(() => messageUrls.favoriteItems.value)
 
 const handleForwardedClick = () => {
   forwardedDialogVisible.value = true
@@ -281,6 +290,8 @@ const handleComponentClick = () => {
   // 图片/视频点击由各自消息组件内部预览处理，这里只处理需要外链打开的类型
   if (isForwardedMessage.value) {
     handleForwardedClick()
+  } else if (isFavoriteMessage.value) {
+    favoriteDialogVisible.value = true
   } else if (isFileMessage.value) {
     handleFileClick()
   } else if (isLinkMessage.value) {
@@ -297,6 +308,7 @@ const handleComponentClick = () => {
 }
 
 const forwardedTitle = computed(() => messageUrls.forwardedTitle.value || '聊天记录')
+const favoriteTitle = computed(() => messageUrls.favoriteTitle.value || '收藏内容')
 </script>
 
 <template>
@@ -397,6 +409,13 @@ const forwardedTitle = computed(() => messageUrls.forwardedTitle.value || '聊�
       v-model:visible="forwardedDialogVisible"
       :title="forwardedTitle"
       :messages="forwardedMessages"
+    />
+
+    <FavoriteDialog
+      v-if="isFavoriteMessage"
+      v-model:visible="favoriteDialogVisible"
+      :title="favoriteTitle"
+      :items="favoriteMessages"
     />
   </div>
 </template>
